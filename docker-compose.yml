@@ -1,0 +1,27 @@
+# docker-compose.yml
+# Local development setup for the Hybrid Routing Agent.
+#
+# Usage:
+#   docker compose up --build
+#
+# For AMD GPU support, uncomment the devices section below.
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL=DEBUG
+    volumes:
+      # Mount local eval tasks for easy iteration
+      - ./eval:/app/eval:ro
+      # Mount output directory for results
+      - ./output:/app/output
+    command: ["--tasks", "/app/eval/test_tasks.json", "--output", "/app/output/results.json"]
+    # Uncomment for AMD GPU support (ROCm)
+    # devices:
+    #   - /dev/kfd:/dev/kfd
+    #   - /dev/dri:/dev/dri
