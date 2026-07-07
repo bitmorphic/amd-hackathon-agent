@@ -4,7 +4,7 @@
 
 # TERA (Token-Efficient Routing Agent)
 
-**AMD Developer Hackathon: ACT II — Track 1: General-Purpose AI Agent**  
+**AMD Developer Hackathon: ACT II — Track 1: Hybrid Token-Efficient Routing Agent**  
 **Team:** Brute Force
 
 <div align="center">
