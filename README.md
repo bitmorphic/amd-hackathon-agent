@@ -1,6 +1,19 @@
+<div align="center">
+  <img src="assets/banner.png" alt="AMD Developer Hackathon" width="100%">
+</div>
+
 # Hybrid Token-Efficient Routing Agent
 
 **AMD Developer Hackathon: ACT II — Track 1: General-Purpose AI Agent**
+
+<div align="center">
+  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/Llama_3-0466C8?style=for-the-badge&logo=meta&logoColor=white" alt="Llama 3" />
+  <img src="https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white" alt="GitHub Actions" />
+</div>
+
+<br/>
 
 A token-efficient AI agent that handles all 8 capability categories using a hybrid routing architecture that minimizes API token usage while maintaining high answer quality.
 
