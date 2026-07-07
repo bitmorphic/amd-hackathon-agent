@@ -21,12 +21,6 @@ A token-efficient AI agent that handles all 8 capability categories using a hybr
 
 ## Architecture
 
-Here is a 5-second visualization of how tasks flow through the routing engine:
-
-<div align="center">
-  <img src="assets/workflow.webp" alt="Agent Workflow Animation" width="100%">
-</div>
-
 ```
 Input Tasks (/input/tasks.json)
         │
