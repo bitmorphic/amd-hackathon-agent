@@ -2,7 +2,7 @@
   <img src="assets/banner.png" alt="AMD Developer Hackathon" width="100%">
 </div>
 
-# Hybrid Token-Efficient Routing Agent
+# TERA (Token-Efficient Routing Agent)
 
 **AMD Developer Hackathon: ACT II — Track 1: General-Purpose AI Agent**  
 **Team:** Brute Force
@@ -20,15 +20,6 @@
 A token-efficient AI agent that handles all 8 capability categories using a hybrid routing architecture that minimizes API token usage while maintaining high answer quality.
 
 ## Architecture
-
-Here is a 10-second visualization of how tasks flow through the routing engine:
-
-<div align="center">
-  <video width="100%" controls autoplay loop muted>
-    <source src="https://raw.githubusercontent.com/bitmorphic/amd-hackathon-agent/main/assets/workflow_video.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-</div>
 
 ```
 Input Tasks (/input/tasks.json)
