@@ -23,9 +23,7 @@ A token-efficient AI agent that handles all 8 capability categories using a hybr
 
 Here is a 10-second visualization of how tasks flow through the routing engine:
 
-<div align="center">
-  <video src="https://github.com/bitmorphic/amd-hackathon-agent/raw/main/assets/workflow_video.mp4" controls="controls" muted="muted" style="max-width: 100%;"></video>
-</div>
+https://github.com/bitmorphic/amd-hackathon-agent/raw/main/assets/workflow_video.mp4
 
 ```
 Input Tasks (/input/tasks.json)
