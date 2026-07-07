@@ -21,6 +21,12 @@ A token-efficient AI agent that handles all 8 capability categories using a hybr
 
 ## Architecture
 
+Here is a 10-second visualization of how tasks flow through the routing engine:
+
+<div align="center">
+  <video src="assets/A_sleek_flat_design_D_motion.mp4" controls width="100%"></video>
+</div>
+
 ```
 Input Tasks (/input/tasks.json)
         │
