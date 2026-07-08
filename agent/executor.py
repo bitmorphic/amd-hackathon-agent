@@ -45,14 +45,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _CATEGORY_PROMPTS: dict[str, str] = {
-    "sentiment": "Classify the sentiment (positive/negative/neutral). State the label first, then briefly justify.",
-    "ner": "Extract all named entities. For each, state the text and its type (Person, Organization, Location, Date, etc.).",
-    "summarization": "Summarize the text concisely. Follow any length or format constraints given.",
-    "code_debug": "Identify the bug in the code. Show the corrected implementation.",
-    "code_gen": "Write correct, well-structured code that satisfies the spec. Include only the code.",
-    "math": "Solve step-by-step. State the final numerical answer clearly.",
-    "logic": "Reason through the constraints step-by-step. State the conclusion clearly.",
-    "factual": "Answer accurately and concisely.",
+    "sentiment": "Return ONLY the sentiment label (positive, negative, or neutral). Do not include any other text or justification.",
+    "ner": "Extract all named entities. Format as a comma-separated list of entities.",
+    "summarization": "Summarize the text concisely.",
+    "code_debug": "Return ONLY the corrected code. No explanations.",
+    "code_gen": "Return ONLY the raw code. Do not use markdown formatting or explanations.",
+    "math": "Return ONLY the final numerical answer. Do not show your steps or any text.",
+    "logic": "Return ONLY the final conclusion.",
+    "factual": "Answer accurately and concisely. Return ONLY the answer, with no conversational filler.",
 }
 
 
@@ -201,8 +201,8 @@ class RuleBasedExecutor:
 
     # Math expressions: "What is 7 + 15?", "Calculate 3 * 4"
     _MATH_PATTERN = re.compile(
-        r"(?:what is|calculate|compute|solve|evaluate)?\s*(\d+(?:\.\d+)?)\s*"
-        r"([\+\-\*\/\^])\s*(\d+(?:\.\d+)?)",
+        r"^(?:what is|calculate|compute|solve|evaluate)?\s*(\d+(?:\.\d+)?)\s*"
+        r"([\+\-\*\/\^])\s*(\d+(?:\.\d+)?)[^\d\w]*$",
         re.I,
     )
 
