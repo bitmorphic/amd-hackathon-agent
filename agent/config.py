@@ -135,7 +135,8 @@ def _select_model(config: FireworksConfig) -> str:
     """
     Select the best model from ALLOWED_MODELS.
 
-    Prefers smaller/cheaper models for token efficiency.
+    Prefers larger/smarter models for accuracy — passing the accuracy
+    gate is the top priority.  Token optimization comes second.
     Falls back to FIREWORKS_MODEL if ALLOWED_MODELS is empty (local dev).
     """
     logger = logging.getLogger(__name__)
@@ -144,10 +145,10 @@ def _select_model(config: FireworksConfig) -> str:
         logger.info("ALLOWED_MODELS not set — using FIREWORKS_MODEL: %s", config.model)
         return config.model
 
-    # Preference order: smaller models first (cheaper tokens)
-    # These keywords indicate model size — prefer smaller for efficiency
-    size_priority = ["8b", "3b", "1b", "scout", "small", "mini", "instant",
-                     "70b", "maverick", "large", "405b"]
+    # Preference order: LARGER models first (better accuracy)
+    # Passing the accuracy gate is more important than saving tokens.
+    size_priority = ["405b", "large", "maverick", "70b",
+                     "scout", "8b", "3b", "1b", "small", "mini", "instant"]
 
     def model_priority(model_id: str) -> int:
         model_lower = model_id.lower()

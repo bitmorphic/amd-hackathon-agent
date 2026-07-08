@@ -562,7 +562,7 @@ class HybridExecutor:
         result = self._remote.execute(
             task,
             max_tokens_override=token_budget,
-            compress=self._compression_enabled,
+            compress=False,  # Disable compression to preserve prompt accuracy
         )
         self._cache.put(task.prompt, result)
         return result

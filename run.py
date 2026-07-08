@@ -82,11 +82,14 @@ def main() -> int:
 
         raw = json.loads(input_path.read_text(encoding="utf-8"))
 
-        # Normalize task format: support both "task_id" and "id" keys
+        # Normalize task format: support various key names
         tasks = []
         for item in raw:
-            task_id = item.get("task_id") or item.get("id", "")
-            prompt = item.get("prompt", "")
+            task_id = (item.get("task_id") or item.get("id")
+                       or item.get("taskId") or item.get("task") or "")
+            prompt = (item.get("prompt") or item.get("question")
+                      or item.get("input") or item.get("text")
+                      or item.get("query") or "")
             if task_id and prompt:
                 tasks.append(Task(id=str(task_id), prompt=prompt))
 
