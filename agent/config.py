@@ -45,7 +45,7 @@ class FireworksConfig:
         ]
     )
     temperature: float = field(
-        default_factory=lambda: float(os.getenv("FIREWORKS_TEMPERATURE", "0.1"))
+        default_factory=lambda: float(os.getenv("FIREWORKS_TEMPERATURE", "0.0"))
     )
     max_tokens: int = field(
         default_factory=lambda: int(os.getenv("FIREWORKS_MAX_TOKENS", "512"))

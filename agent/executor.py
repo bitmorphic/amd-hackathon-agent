@@ -118,6 +118,7 @@ class RemoteExecutor:
         self._client = OpenAI(
             base_url=self._config.base_url,
             api_key=self._config.api_key,
+            max_retries=3,
         )
 
     def execute(
@@ -135,13 +136,11 @@ class RemoteExecutor:
 
         max_tokens = max_tokens_override or self._config.max_tokens
 
-        # Category-aware system prompt for better accuracy
-        category = _detect_category(task.prompt)
-        system_prompt = _CATEGORY_PROMPTS.get(category, "Answer accurately and concisely.")
-
+        # No system prompt! Large models perform better on these tasks when not
+        # constrained by an artificial format that might clash with what the judge expects.
         logger.info(
-            "Remote execution for task %s via %s (max_tokens=%d, category=%s)",
-            task.id, self._resolved_model, max_tokens, category,
+            "Remote execution for task %s via %s",
+            task.id, self._resolved_model,
         )
         start = time.perf_counter()
 
@@ -149,11 +148,10 @@ class RemoteExecutor:
             response = self._client.chat.completions.create(
                 model=self._resolved_model,
                 messages=[
-                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=self._config.temperature,
-                max_tokens=max_tokens,
+                # Intentionally omitting max_tokens so the model isn't truncated
             )
 
             elapsed_ms = (time.perf_counter() - start) * 1000
