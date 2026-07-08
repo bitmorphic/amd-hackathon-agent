@@ -82,15 +82,15 @@ def _detect_budget_category(prompt: str) -> str:
 # These budgets balance accuracy (LLM-Judge) vs token efficiency (scoring).
 # Each is tuned to be the minimum needed for a quality answer.
 _CATEGORY_BUDGETS: dict[str, int] = {
-    "code":          400,   # Complete functions with docstrings
-    "sentiment":     80,    # Label + 1-2 sentence justification
-    "ner":           150,   # Structured entity list
-    "summarization": 100,   # 1-3 concise sentences
-    "math":          200,   # Step-by-step + final answer
-    "simple_math":   30,    # Just the number
-    "logic":         200,   # Step-by-step reasoning + conclusion
-    "explanation":   200,   # 2-4 sentences
-    "general":       150,   # Default
+    "code":          512,   # Complete functions with context
+    "sentiment":     100,   # Label + brief justification
+    "ner":           200,   # Structured entity list
+    "summarization": 200,   # 2-4 concise sentences
+    "math":          300,   # Step-by-step + final answer
+    "simple_math":   50,    # Just the number
+    "logic":         300,   # Step-by-step reasoning + conclusion
+    "explanation":   300,   # 3-5 sentences
+    "general":       256,   # Default
 }
 
 
@@ -118,4 +118,4 @@ def estimate_token_budget(task: Task, decision: RoutingDecision) -> int:
         base_budget = max(base_budget, 250)
 
     # Cap at reasonable maximum
-    return min(base_budget, 600)
+    return min(base_budget, 800)

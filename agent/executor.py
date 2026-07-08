@@ -45,14 +45,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _CATEGORY_PROMPTS: dict[str, str] = {
-    "sentiment": "Return ONLY the sentiment label (positive, negative, or neutral). Do not include any other text or justification.",
-    "ner": "Extract all named entities. Format as a comma-separated list of entities.",
-    "summarization": "Summarize the text concisely.",
-    "code_debug": "Return ONLY the corrected code. No explanations.",
-    "code_gen": "Return ONLY the raw code. Do not use markdown formatting or explanations.",
-    "math": "Return ONLY the final numerical answer. Do not show your steps or any text.",
-    "logic": "Return ONLY the final conclusion.",
-    "factual": "Answer accurately and concisely. Return ONLY the answer, with no conversational filler.",
+    "sentiment": "Classify the sentiment as positive, negative, or neutral. State the label first, then briefly explain why.",
+    "ner": "Extract all named entities from the text. For each entity, state its text and type (Person, Organization, Location, etc.).",
+    "summarization": "Provide a clear, concise summary of the text.",
+    "code_debug": "Identify the bug in the code and provide the corrected version. Briefly explain what was wrong.",
+    "code_gen": "Write clean, correct code that fulfills the requirements. Include only the code.",
+    "math": "Solve the problem. Show key steps and clearly state the final numerical answer.",
+    "logic": "Reason through the problem logically. State your conclusion clearly.",
+    "factual": "Answer the question accurately and concisely.",
 }
 
 
@@ -177,7 +177,7 @@ class RemoteExecutor:
             elapsed_ms = (time.perf_counter() - start) * 1000
             logger.error("Remote execution failed for task %s: %s", task.id, exc)
             return ExecutionResult(
-                output=f"[ERROR] Remote model call failed: {exc}",
+                output="",
                 route_used=Route.REMOTE,
                 token_usage=TokenUsage(),
                 confidence=0.0,
@@ -555,64 +555,14 @@ class HybridExecutor:
             self._cache.put(task.prompt, rule_result)
             return rule_result
 
-        # ── Step 3: Route to remote ──
-        if decision.route == Route.REMOTE:
-            result = self._remote.execute(
-                task,
-                max_tokens_override=token_budget,
-                compress=self._compression_enabled,
-            )
-            self._cache.put(task.prompt, result)
-            return result
-
-        # ── Step 4: Local model execution with cascading verification ──
-        try:
-            local_result = self._local.execute(
-                task,
-                max_new_tokens_override=token_budget,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Task %s: local model unavailable (%s) — routing to remote",
-                task.id, exc,
-            )
-            result = self._remote.execute(
-                task,
-                max_tokens_override=token_budget,
-                compress=self._compression_enabled,
-            )
-            self._cache.put(task.prompt, result)
-            return result
-
-        # ── Step 5: Verify local output quality ──
-        confidence_ok = local_result.confidence >= self._fallback_threshold
-        verification_ok = self._verifier.verify(task, local_result)
-
-        if confidence_ok and verification_ok:
-            # Local result is good — cache it and return (0 scored tokens!)
-            self._cache.put(task.prompt, local_result)
-            return local_result
-
-        # ── Step 6: Escalate to remote (fallback) ──
-        reason = []
-        if not confidence_ok:
-            reason.append(
-                f"confidence {local_result.confidence:.2f} < {self._fallback_threshold:.2f}"
-            )
-        if not verification_ok:
-            reason.append("output verification failed")
-
-        logger.warning(
-            "Task %s: local output rejected (%s) — falling back to remote",
-            task.id,
-            ", ".join(reason),
-        )
-
-        remote_result = self._remote.execute(
+        # ── Step 3: Remote execution ──
+        # Always use the remote Fireworks API for non-rule tasks.
+        # The local HuggingFace model is skipped because the evaluation
+        # container has no GPU and cannot download the ~5GB model in time.
+        result = self._remote.execute(
             task,
             max_tokens_override=token_budget,
             compress=self._compression_enabled,
         )
-        remote_result.fallback_triggered = True
-        self._cache.put(task.prompt, remote_result)
-        return remote_result
+        self._cache.put(task.prompt, result)
+        return result
