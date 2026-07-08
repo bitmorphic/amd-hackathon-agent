@@ -56,11 +56,6 @@ COPY requirements.txt .
 # Create output directory and input mount point
 RUN mkdir -p /input /output
 
-# Create a non-root user for security
-RUN useradd --create-home --shell /bin/bash agent && \
-    chown -R agent:agent /output
-USER agent
-
 # Default environment variables (can be overridden at runtime)
 # NOTE: FIREWORKS_API_KEY, FIREWORKS_BASE_URL, ALLOWED_MODELS
 # are injected by the hackathon harness — do NOT set them here.
