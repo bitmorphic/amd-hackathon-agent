@@ -426,7 +426,7 @@ class RuleBasedExecutor:
             else:
                 return None
             answer = str(int(result)) if result == int(result) else str(round(result, 6))
-            return self._make_result(answer)
+            return self._make_result(f"Answer: {answer}")
         except Exception:
             return None
 
