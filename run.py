@@ -111,23 +111,15 @@ def main() -> int:
         return 1
 
     # ── Step 4: Process tasks ──
-    results = []
-    for i, task in enumerate(tasks):
-        # Safety: check runtime limit
-        elapsed = time.monotonic() - start_time
-        if elapsed > MAX_RUNTIME_SECONDS:
-            logger.warning(
-                "Approaching 10-min runtime limit (%.0fs elapsed). "
-                "Stopping with %d/%d tasks completed.",
-                elapsed, i, len(tasks),
-            )
-            break
+    from concurrent.futures import ThreadPoolExecutor
 
+    deadline = start_time + MAX_RUNTIME_SECONDS
+    results = []
+
+    def _process_task(task: Task):
         try:
             decision = router.route(task)
             result = executor.execute(task, decision)
-            answer = result.output
-
             logger.info(
                 "Task %s: route=%s tokens=%d latency=%.0fms category=%s",
                 task.id,
@@ -136,14 +128,22 @@ def main() -> int:
                 result.latency_ms,
                 decision.difficulty.value,
             )
+            return {"task_id": task.id, "answer": result.output}
         except Exception as exc:
             logger.error("Task %s failed: %s", task.id, exc)
-            answer = ""  # Empty answer is better than crashing
+            return {"task_id": task.id, "answer": ""}
 
-        results.append({
-            "task_id": task.id,
-            "answer": answer,
-        })
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(_process_task, task) for task in tasks]
+
+        for i, fut in enumerate(futures):
+            try:
+                # Ensure we leave enough time to write results.json
+                timeout = max(1.0, deadline - time.monotonic())
+                results.append(fut.result(timeout=timeout))
+            except Exception as exc:
+                logger.error("Task %s timed out or failed: %s", tasks[i].id, exc)
+                results.append({"task_id": tasks[i].id, "answer": ""})
 
     # ── Step 5: Write output ──
     try:
