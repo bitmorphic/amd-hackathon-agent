@@ -228,7 +228,7 @@ def _resolve_tiers(allowed_models: list[str]) -> dict[str, str]:
 # Remote executor (Fireworks AI)
 # ---------------------------------------------------------------------------
 
-_THINK_PAT = re.compile(r"<think>.*?(?:</think>|$)\s*", re.DOTALL)
+_THINK_PAT = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 
 class RemoteExecutor:
     """
@@ -327,14 +327,18 @@ class RemoteExecutor:
         pt = ct = 0
 
         try:
-            text, pt, ct = self._call(primary_model, task.prompt, system, max_tokens)
+            try:
+                text, pt, ct = self._call(primary_model, task.prompt, system, max_tokens)
+            except Exception as primary_exc:
+                logger.warning("Task %s: primary model threw exception: %s", task.id, primary_exc)
+                text, pt, ct = "", 0, 0
 
             # Fallback: blank answer on primary → retry with the alternate tier
             fallback_model = self._model_for_tier("strong") if tier == "cheap" else self._model_for_tier("cheap")
             
             if not text and primary_model != fallback_model:
                 logger.warning(
-                    "Task %s: primary model returned blank — retrying with fallback tier",
+                    "Task %s: primary model returned blank or failed — retrying with fallback tier",
                     task.id,
                 )
                 try:
