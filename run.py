@@ -113,13 +113,23 @@ def main() -> int:
     # ── Step 4: Process tasks ──
     from concurrent.futures import ThreadPoolExecutor
 
+    import threading
+    
     deadline = start_time + MAX_RUNTIME_SECONDS
     results = []
+    
+    total_tokens = 0
+    token_lock = threading.Lock()
 
     def _process_task(task: Task):
+        nonlocal total_tokens
         try:
             decision = router.route(task)
             result = executor.execute(task, decision)
+            
+            with token_lock:
+                total_tokens += result.token_usage.total_tokens
+                
             logger.info(
                 "Task %s: route=%s tokens=%d latency=%.0fms category=%s",
                 task.id,
@@ -160,10 +170,9 @@ def main() -> int:
 
     # ── Summary ──
     total_elapsed = time.monotonic() - start_time
-    total_tokens = 0
     if hasattr(executor, 'cache'):
         logger.info("Cache hits: %d", executor.cache.stats.hits)
-    logger.info("Total runtime: %.1fs | Tasks: %d", total_elapsed, len(results))
+    logger.info("Total runtime: %.1fs | Tasks: %d | Total Tokens Used: %d", total_elapsed, len(results), total_tokens)
 
     return 0
 
