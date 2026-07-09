@@ -39,63 +39,61 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _CLASSIFIER_PATTERNS: dict[str, list[str]] = {
-    "sentiment": [
-        r"\bsentiment\b", r"\bpositive or negative\b", r"\bpositive, negative\b",
-        r"\bclassify the (tone|emotion|sentiment)\b", r"\bis this (review|tweet|comment)\b",
-        r"\b(positive|negative|neutral)\s+sentiment\b",
-        r"\bemotional tone\b", r"\btone of (this|the|that)\b", r"\bhow (positive|negative)\b",
-        r"\b(mood|emotion|attitude) of (this|the|that)\b", r"\b(happy|upset|angry|sad) or\b",
-        r"\brate the (mood|tone|sentiment)\b",
-    ],
-    "summarization": [
-        r"\bsummari[sz]e\b", r"\bsummary\b", r"\btl;?dr\b", r"\bcondense\b",
-        r"\bin (one|a single|two|three) sentences?\b", r"\bin \d+ words?\b",
-        r"\bshorten\b", r"\bkey points\b", r"\bthe gist\b", r"\bboil .* down\b",
-        r"\bmain (idea|point|takeaway)", r"\bin a (single|one) line\b",
-    ],
-    "ner": [
-        r"\bnamed entit", r"\bextract (all )?(the )?(entit|name|person|organi|location|date)",
-        r"\blist (all )?(the )?(people|organi[sz]ations?|locations?|dates?)\b",
-        r"\bidentify (the )?(person|organi|location|date|entit)",
-        r"\b(person|org|organization|location|date)\s*[:=]",
-        r"\b(mentioned|named) in (this|the|below)", r"\bpull out (every|all|the)\b",
-        r"\b(company|people|place|person) names?\b", r"\bwho and what\b",
-    ],
     "code_debug": [
-        r"\b(fix|debug|find the bug|what'?s wrong|why (does|is)n'?t|error in)\b.*\bcode\b",
-        r"\bbug\b", r"\bdebug\b", r"\bfix (this|the|my) (code|function|snippet|program)\b",
-        r"\bwhy (does|is)n'?t (this|it|my)\b", r"\bcorrect(ed)? (version|implementation)\b",
-        r"\btraceback\b", r"\bstack ?trace\b", r"\bthrows? an? (error|exception)\b",
-        r"\bwhat (did i do wrong|went wrong)\b", r"\b(runs?|loops?) forever\b",
-        r"\binfinite loop\b", r"\breturns? \w+ instead\b", r"\btell me why\b",
+        r"\bbug\b", r"\bdebug\b", r"\bfix (this|the|my|it)\b",
+        r"what'?s wrong", r"why (does|is)n'?t (this|it|my)\b",
+        r"error in (this|the|my)\b", r"traceback", r"stack ?trace",
+        r"throws? an? (error|exception)", r"returns? \w+ instead",
+        r"infinite loop", r"corrected (version|code)",
     ],
     "code_gen": [
-        r"\b(write|create|produce|build|give me|need|implement) (a|an|me a)?\s?(\w+\s)?"
-        r"(function|program|script|method|class|routine)\b",
-        r"\bimplement (a |an |the )?\w+", r"\bgenerate (code|a function)\b", r"\bcode that\b",
-        r"\bfunction (that|to)\b", r"\bscript (that|to)\b", r"\bmethod (that|to)\b",
+        r"\b(write|create|implement|build|generate|produce|give me)\b.*"
+        r"\b(function|method|class|program|script|routine)\b",
+        r"\bfunction (that|to)\b", r"\bcode that\b",
+        r"\bwrite (a|an|some) code\b", r"\bimplement (a|an|the)\b",
+    ],
+    "sentiment": [
+        r"\bsentiment\b", r"positive or negative", r"positive, negative",
+        r"classify the (tone|emotion|sentiment|mood)",
+        r"(emotional )?tone of (this|the|that)",
+        r"\b(positive|negative|neutral)\b.*\breview\b",
+        r"how (positive|negative) ", r"is this (review|tweet|comment)\b",
+    ],
+    "ner": [
+        r"named entit", r"\bner\b",
+        r"extract (all )?(the )?(entit|name|person|people|organi|location|date)",
+        r"(list|identify|find|pull out) (all )?(the )?"
+        r"(people|persons?|organi[sz]ations?|locations?|dates?|entit)",
+        r"(person|organization|location|date)\s*[:=]",
+    ],
+    "summarization": [
+        r"summari[sz]e", r"\bsummary\b", r"\btl;?dr\b", r"\bcondense\b",
+        r"\bshorten\b", r"in (one|a single|two|three|\d+) (sentences?|words?|lines?)",
+        r"main (idea|point|takeaway)", r"\bthe gist\b", r"key points",
+        r"boil .* down",
     ],
     "logic": [
-        r"\bpuzzle\b", r"\bwho (is|owns|sits|lives|has|drinks)\b",
-        r"\bif and only if\b", r"\bexactly one\b", r"\bat least one\b",
-        r"\beach (person|house|box|day)\b.*\b(exactly|only|one)\b",
-        r"\bconstraints?\b", r"\bdeduce\b", r"\blogically\b",
-        r"\bthe following (clues|facts|statements)\b",
-        r"\beach (have|has|own|owns|is|are)? ?a different\b",
-        r"\bif all \w+ are\b", r"\b(definitely|necessarily) (true|follows?|a)\b",
+        r"\bpuzzle\b", r"who (is|owns|sits|lives|has|drinks|likes)\b",
+        r"if and only if", r"exactly one", r"at least one",
+        r"the following (clues|facts|statements|conditions)",
+        r"each (person|house|box|day|one) .*(different|exactly|only|one)",
+        r"\bdeduce\b", r"logically (follows?|true)",
+        r"(definitely|necessarily) (true|follows)",
+        r"knights? and knaves", r"truth[- ]?teller", r"\bliar\b",
     ],
     "math": [
-        r"\bcalculate\b", r"\bcompute\b", r"\bhow (much|many)\b", r"\bpercent",
-        r"\b\d+\s*%", r"\bsum of\b", r"\baverage\b", r"\bprojection\b",
-        r"\bwhat is \d", r"\b\d+\s*[+\-*/x×÷]\s*\d+", r"\bsolve for\b",
-        r"\btotal (cost|price|amount)\b", r"\bround(ed)?\b", r"\bdecimal (place|point)",
-        r"\bratio\b", r"\b\d+\s*:\s*\d+", r"\b(interest|discount)\b",
-        r"\bfind the (largest|smallest|value|angle|area|sum|total)\b",
+        r"\bcalculate\b", r"\bcompute\b", r"how (much|many)\b", r"percent",
+        r"\d+\s*%", r"\bsum of\b", r"\baverage\b", r"solve for\b",
+        r"\d+\s*[+\-*/x×÷]\s*\d+", r"total (cost|price|amount)",
+        r"\b(interest|discount|ratio|profit)\b",
+        r"find the (largest|smallest|value|angle|area|sum|total|average)",
+        r"what is \d",
     ],
     "factual": [
-        r"\bwhat is\b", r"\bwhat are\b", r"\bwho (was|were)\b", r"\bwhen (did|was)\b",
-        r"\bwhere (is|was)\b", r"\bwhy (is|do|does)\b", r"\bhow (do|does)\b",
-        r"\bexplain\b", r"\bdefine\b", r"\bdescribe\b", r"\bwhat does .* mean\b",
+        r"what (is|are|was|were)\b", r"who (is|was|were)\b",
+        r"when (did|was|is)\b", r"where (is|was|are)\b",
+        r"why (is|do|does|are)\b", r"how (do|does|can)\b",
+        r"\bexplain\b", r"\bdefine\b", r"\bdescribe\b", r"what does .* mean",
     ],
 }
 
@@ -112,21 +110,19 @@ _COMPILED_PATTERNS: dict[str, list[re.Pattern]] = {
 
 _CODE_FENCE = re.compile(r"```")
 _CODE_HINT = re.compile(
-    r"\b(def |class |function |return |import |#include|public |void |"
-    r"console\.log|printf|System\.out|=>|;\s*$)",
+    r"\b(def |class |return |import |#include|public |void |printf|"
+    r"console\.log|System\.out)|=>|;\s*$",
     re.MULTILINE,
 )
 
-
 def _detect_category(prompt: str) -> str:
     """Classify the prompt into one of the 8 hackathon categories."""
+    text = prompt or ""
     for cat in _PRIORITY_ORDER:
-        if any(rx.search(prompt) for rx in _COMPILED_PATTERNS[cat]):
+        if any(rx.search(text) for rx in _COMPILED_PATTERNS[cat]):
             return cat
     # Raw code in prompt with no other signals → probably debug
-    if _CODE_FENCE.search(prompt) or _CODE_HINT.search(prompt):
-        return "code_debug"
-    return "factual"
+    return "code_debug" if (_CODE_FENCE.search(text) or _CODE_HINT.search(text)) else "factual"
 
 
 # ---------------------------------------------------------------------------
@@ -134,43 +130,39 @@ def _detect_category(prompt: str) -> str:
 # Tiers: "cheap" = small/fast, "strong" = largest general, "code" = code-spec
 # ---------------------------------------------------------------------------
 
-_BASE = "English only. Be concise; no preamble."
+_BASE = "Answer in English. Be concise and direct; no preamble, no restating the question."
 
 _CATEGORY_CONFIG: dict[str, tuple[str, int, str]] = {
     "factual": (
-        f"{_BASE} Explain clearly in under 120 words.",
-        300, "strong",
+        f"{_BASE} Give a correct, clear answer in under 120 words.",
+        320, "strong",
     ),
     "math": (
-        f"{_BASE} Brief steps, then 'Answer: <value>' on its own line.",
+        f"{_BASE} Work through it in brief steps, then end with 'Answer: <value>' on its own line.",
         400, "strong",
     ),
     "sentiment": (
-        f"{_BASE} Label the sentiment positive, negative, or neutral, "
-        f"then give one short justification.",
+        f"{_BASE} State the sentiment as positive, negative, or neutral, then one short reason.",
         120, "cheap",
     ),
     "summarization": (
-        f"{_BASE} Output only the summary; obey any stated length or format constraint.",
-        220, "cheap",
+        f"{_BASE} Output only the summary and obey any length or format constraint stated in the task.",
+        240, "cheap",
     ),
     "ner": (
-        f"{_BASE} List each entity as 'label: value', one per line; "
-        f"labels: person, organization, location, date.",
+        f"{_BASE} List each entity as 'label: value', one per line, using the labels person, organization, location, date.",
         260, "cheap",
     ),
     "code_debug": (
-        f"{_BASE} Name the bug in one sentence, then give the corrected code "
-        f"in one fenced block.",
+        f"{_BASE} State the bug in one sentence, then give the corrected code in a single fenced block.",
         520, "code",
     ),
     "logic": (
-        f"{_BASE} Deduce in brief numbered steps checking every constraint, "
-        f"then 'Answer: <value>' on its own line.",
-        420, "strong",
+        f"{_BASE} Reason in brief numbered steps, checking each constraint, then end with 'Answer: <value>' on its own line.",
+        460, "strong",
     ),
     "code_gen": (
-        f"{_BASE} Output only the code in one fenced block, correct and self-contained.",
+        f"{_BASE} Output only the code in a single fenced block — correct, complete, and self-contained.",
         520, "code",
     ),
 }
@@ -236,6 +228,8 @@ def _resolve_tiers(allowed_models: list[str]) -> dict[str, str]:
 # Remote executor (Fireworks AI)
 # ---------------------------------------------------------------------------
 
+_THINK_PAT = re.compile(r"<think>.*?(?:</think>|$)\s*", re.DOTALL)
+
 class RemoteExecutor:
     """
     Calls the remote Fireworks API with smart model tiering per task category.
@@ -291,7 +285,7 @@ class RemoteExecutor:
                 **kwargs,
             )
         except Exception as e:
-            if not (kwargs and "invalid_request_error" in str(e).lower()):
+            if not (kwargs and "reasoning effort" in str(e).lower()):
                 raise
             self._no_effort_param.add(model)
             response = self._client.chat.completions.create(
@@ -306,6 +300,8 @@ class RemoteExecutor:
             
         usage = response.usage
         text = (response.choices[0].message.content or "").strip()
+        text = _THINK_PAT.sub("", text).strip()
+        
         pt = usage.prompt_tokens if usage else 0
         ct = usage.completion_tokens if usage else 0
         return text, pt, ct
