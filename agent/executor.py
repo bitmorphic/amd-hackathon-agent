@@ -39,50 +39,41 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _CLASSIFIER_PATTERNS: dict[str, list[str]] = {
-    "code_debug": [
-        r"\b(fix|debug|find the bug|what'?s wrong|why (does|is)n'?t|error in)\b.*\bcode\b",
-        r"\bbug\b", r"\bdebug\b",
-        r"\bfix (this|the|my) (code|function|snippet|program)\b",
-        r"\bwhy (does|is)n'?t (this|it|my)\b",
-        r"\bcorrect(ed)? (version|implementation)\b",
-        r"\btraceback\b", r"\bstack ?trace\b",
-        r"\bthrows? an? (error|exception)\b",
-        r"\bwhat (did i do wrong|went wrong)\b",
-        r"\b(runs?|loops?) forever\b", r"\binfinite loop\b",
-        r"\breturns? \w+ instead\b", r"\btell me why\b",
-    ],
-    "code_gen": [
-        r"\b(write|create|produce|build|give me|need|implement) (a|an|me a)?\s?(\w+\s)?"
-        r"(function|program|script|method|class|routine)\b",
-        r"\bimplement (a |an |the )?\w+",
-        r"\bgenerate (code|a function)\b", r"\bcode that\b",
-        r"\bfunction (that|to)\b", r"\bscript (that|to)\b", r"\bmethod (that|to)\b",
-    ],
     "sentiment": [
         r"\bsentiment\b", r"\bpositive or negative\b", r"\bpositive, negative\b",
-        r"\bclassify the (tone|emotion|sentiment)\b",
-        r"\bis this (review|tweet|comment)\b",
+        r"\bclassify the (tone|emotion|sentiment)\b", r"\bis this (review|tweet|comment)\b",
         r"\b(positive|negative|neutral)\s+sentiment\b",
-        r"\bemotional tone\b", r"\btone of (this|the|that)\b",
-        r"\bhow (positive|negative)\b",
-        r"\b(mood|emotion|attitude) of (this|the|that)\b",
+        r"\bemotional tone\b", r"\btone of (this|the|that)\b", r"\bhow (positive|negative)\b",
+        r"\b(mood|emotion|attitude) of (this|the|that)\b", r"\b(happy|upset|angry|sad) or\b",
         r"\brate the (mood|tone|sentiment)\b",
-    ],
-    "ner": [
-        r"\bnamed entit",
-        r"\bextract (all )?(the )?(entit|name|person|organi|location|date)",
-        r"\blist (all )?(the )?(people|organi[sz]ations?|locations?|dates?)\b",
-        r"\bidentify (the )?(person|organi|location|date|entit)",
-        r"\b(person|org|organization|location|date)\s*[:=]",
-        r"\b(mentioned|named) in (this|the|below)",
-        r"\bpull out (every|all|the)\b",
-        r"\b(company|people|place|person) names?\b",
     ],
     "summarization": [
         r"\bsummari[sz]e\b", r"\bsummary\b", r"\btl;?dr\b", r"\bcondense\b",
         r"\bin (one|a single|two|three) sentences?\b", r"\bin \d+ words?\b",
-        r"\bshorten\b", r"\bkey points\b", r"\bthe gist\b",
+        r"\bshorten\b", r"\bkey points\b", r"\bthe gist\b", r"\bboil .* down\b",
         r"\bmain (idea|point|takeaway)", r"\bin a (single|one) line\b",
+    ],
+    "ner": [
+        r"\bnamed entit", r"\bextract (all )?(the )?(entit|name|person|organi|location|date)",
+        r"\blist (all )?(the )?(people|organi[sz]ations?|locations?|dates?)\b",
+        r"\bidentify (the )?(person|organi|location|date|entit)",
+        r"\b(person|org|organization|location|date)\s*[:=]",
+        r"\b(mentioned|named) in (this|the|below)", r"\bpull out (every|all|the)\b",
+        r"\b(company|people|place|person) names?\b", r"\bwho and what\b",
+    ],
+    "code_debug": [
+        r"\b(fix|debug|find the bug|what'?s wrong|why (does|is)n'?t|error in)\b.*\bcode\b",
+        r"\bbug\b", r"\bdebug\b", r"\bfix (this|the|my) (code|function|snippet|program)\b",
+        r"\bwhy (does|is)n'?t (this|it|my)\b", r"\bcorrect(ed)? (version|implementation)\b",
+        r"\btraceback\b", r"\bstack ?trace\b", r"\bthrows? an? (error|exception)\b",
+        r"\bwhat (did i do wrong|went wrong)\b", r"\b(runs?|loops?) forever\b",
+        r"\binfinite loop\b", r"\breturns? \w+ instead\b", r"\btell me why\b",
+    ],
+    "code_gen": [
+        r"\b(write|create|produce|build|give me|need|implement) (a|an|me a)?\s?(\w+\s)?"
+        r"(function|program|script|method|class|routine)\b",
+        r"\bimplement (a |an |the )?\w+", r"\bgenerate (code|a function)\b", r"\bcode that\b",
+        r"\bfunction (that|to)\b", r"\bscript (that|to)\b", r"\bmethod (that|to)\b",
     ],
     "logic": [
         r"\bpuzzle\b", r"\bwho (is|owns|sits|lives|has|drinks)\b",
@@ -91,24 +82,27 @@ _CLASSIFIER_PATTERNS: dict[str, list[str]] = {
         r"\bconstraints?\b", r"\bdeduce\b", r"\blogically\b",
         r"\bthe following (clues|facts|statements)\b",
         r"\beach (have|has|own|owns|is|are)? ?a different\b",
-        r"\bif all \w+ are\b",
-        r"\b(definitely|necessarily) (true|follows?|a)\b",
+        r"\bif all \w+ are\b", r"\b(definitely|necessarily) (true|follows?|a)\b",
     ],
     "math": [
-        r"\bcalculate\b", r"\bcompute\b", r"\bhow (much|many)\b",
-        r"\bpercent", r"\b\d+\s*%", r"\bsum of\b", r"\baverage\b",
+        r"\bcalculate\b", r"\bcompute\b", r"\bhow (much|many)\b", r"\bpercent",
+        r"\b\d+\s*%", r"\bsum of\b", r"\baverage\b", r"\bprojection\b",
         r"\bwhat is \d", r"\b\d+\s*[+\-*/x×÷]\s*\d+", r"\bsolve for\b",
-        r"\btotal (cost|price|amount)\b", r"\bratio\b", r"\b\d+\s*:\s*\d+",
-        r"\b(interest|discount)\b",
+        r"\btotal (cost|price|amount)\b", r"\bround(ed)?\b", r"\bdecimal (place|point)",
+        r"\bratio\b", r"\b\d+\s*:\s*\d+", r"\b(interest|discount)\b",
         r"\bfind the (largest|smallest|value|angle|area|sum|total)\b",
-        r"\boriginal price\b", r"\bcompound interest\b",
+    ],
+    "factual": [
+        r"\bwhat is\b", r"\bwhat are\b", r"\bwho (was|were)\b", r"\bwhen (did|was)\b",
+        r"\bwhere (is|was)\b", r"\bwhy (is|do|does)\b", r"\bhow (do|does)\b",
+        r"\bexplain\b", r"\bdefine\b", r"\bdescribe\b", r"\bwhat does .* mean\b",
     ],
 }
 
 # Priority order: specific categories before general fallback
 _PRIORITY_ORDER = [
     "code_debug", "code_gen", "sentiment", "ner",
-    "summarization", "logic", "math",
+    "summarization", "logic", "math", "factual",
 ]
 
 _COMPILED_PATTERNS: dict[str, list[re.Pattern]] = {
@@ -267,6 +261,8 @@ class RemoteExecutor:
             fallback = get_resolved_model(config)
             self._tiers = {"cheap": fallback, "strong": fallback, "code": fallback}
             logger.warning("ALLOWED_MODELS not set — all tiers use %s", fallback)
+            
+        self._no_effort_param: set[str] = set()
 
     def _model_for_tier(self, tier: str) -> str:
         return self._tiers.get(tier, self._tiers["strong"])
@@ -279,15 +275,35 @@ class RemoteExecutor:
         max_tokens: int,
     ) -> tuple[str, int, int]:
         """Make one API call; returns (text, prompt_tokens, completion_tokens)."""
-        response = self._client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=self._config.temperature,
-            max_tokens=max_tokens,
-        )
+        kwargs = {}
+        if model not in self._no_effort_param:
+            kwargs["reasoning_effort"] = "none"
+            
+        try:
+            response = self._client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=self._config.temperature,
+                max_tokens=max_tokens,
+                **kwargs,
+            )
+        except Exception as e:
+            if not (kwargs and "invalid_request_error" in str(e).lower()):
+                raise
+            self._no_effort_param.add(model)
+            response = self._client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=self._config.temperature,
+                max_tokens=max_tokens,
+            )
+            
         usage = response.usage
         text = (response.choices[0].message.content or "").strip()
         pt = usage.prompt_tokens if usage else 0
@@ -317,15 +333,17 @@ class RemoteExecutor:
         try:
             text, pt, ct = self._call(primary_model, task.prompt, system, max_tokens)
 
-            # Fallback: blank answer on primary → retry with strong model
-            if not text and primary_model != strong_model:
+            # Fallback: blank answer on primary → retry with the alternate tier
+            fallback_model = self._model_for_tier("strong") if tier == "cheap" else self._model_for_tier("cheap")
+            
+            if not text and primary_model != fallback_model:
                 logger.warning(
-                    "Task %s: primary model returned blank — retrying with strong tier",
+                    "Task %s: primary model returned blank — retrying with fallback tier",
                     task.id,
                 )
                 try:
                     text2, pt2, ct2 = self._call(
-                        strong_model, task.prompt, system, max_tokens
+                        fallback_model, task.prompt, system, max_tokens
                     )
                     if text2:
                         text, pt, ct = text2, pt + pt2, ct + ct2
