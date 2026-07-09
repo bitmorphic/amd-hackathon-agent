@@ -2,14 +2,13 @@
 Executors for local and remote model inference.
 
 - RuleBasedExecutor: Handles simple tasks with pattern matching (zero cost, no GPU).
-- LocalExecutor:  Runs a HuggingFace model in-process (zero scored tokens).
 - RemoteExecutor: Calls the Fireworks AI API via OpenAI-compatible client.
-- HybridExecutor: Orchestrates all three with:
+- HybridExecutor: Orchestrates all executors with:
     • Response caching (identical prompts = free)
-    • Rule-based fast path (simple tasks = instant + free)
-    • Prompt compression (fewer remote tokens)
-    • Dynamic token budgeting (tight max_tokens per task)
-    • Cascading fallback (rules → local model → verify → remote)
+    • Rule-based fast path (simple math = instant + free)
+    • Smart model tiering (cheap / strong / code models per category)
+    • Category-specific system prompts + tight token budgets
+    • Fallback model if primary returns blank
 """
 
 from __future__ import annotations
@@ -17,13 +16,12 @@ from __future__ import annotations
 import logging
 import re
 import time
+from functools import lru_cache
 from typing import Optional
 
 from openai import OpenAI
 
-from agent.budget import estimate_token_budget
 from agent.cache import ResponseCache
-from agent.compressor import compress_prompt
 from agent.config import AppConfig, get_resolved_model
 from agent.models import (
     ExecutionResult,
@@ -37,139 +35,302 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Remote executor (Fireworks AI)
+# Category detection (comprehensive regex classifier — ported from KaananeTaha)
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Category detection & system prompts (hackathon-specific)
-# ---------------------------------------------------------------------------
-
-_CATEGORY_PROMPTS: dict[str, str] = {
-    "sentiment": "Classify the sentiment as positive, negative, or neutral. State the label first, then briefly explain why.",
-    "ner": "Extract all named entities from the text. For each entity, state its text and type (Person, Organization, Location, etc.).",
-    "summarization": "Provide a clear, concise summary of the text.",
-    "code_debug": "Identify the bug in the code and provide the corrected version. Briefly explain what was wrong.",
-    "code_gen": "Write clean, correct code that fulfills the requirements. Include only the code.",
-    "math": "Solve the problem. Show key steps and clearly state the final numerical answer.",
-    "logic": "Reason through the problem logically. State your conclusion clearly.",
-    "factual": "Answer the question accurately and concisely.",
+_CLASSIFIER_PATTERNS: dict[str, list[str]] = {
+    "code_debug": [
+        r"\b(fix|debug|find the bug|what'?s wrong|why (does|is)n'?t|error in)\b.*\bcode\b",
+        r"\bbug\b", r"\bdebug\b",
+        r"\bfix (this|the|my) (code|function|snippet|program)\b",
+        r"\bwhy (does|is)n'?t (this|it|my)\b",
+        r"\bcorrect(ed)? (version|implementation)\b",
+        r"\btraceback\b", r"\bstack ?trace\b",
+        r"\bthrows? an? (error|exception)\b",
+        r"\bwhat (did i do wrong|went wrong)\b",
+        r"\b(runs?|loops?) forever\b", r"\binfinite loop\b",
+        r"\breturns? \w+ instead\b", r"\btell me why\b",
+    ],
+    "code_gen": [
+        r"\b(write|create|produce|build|give me|need|implement) (a|an|me a)?\s?(\w+\s)?"
+        r"(function|program|script|method|class|routine)\b",
+        r"\bimplement (a |an |the )?\w+",
+        r"\bgenerate (code|a function)\b", r"\bcode that\b",
+        r"\bfunction (that|to)\b", r"\bscript (that|to)\b", r"\bmethod (that|to)\b",
+    ],
+    "sentiment": [
+        r"\bsentiment\b", r"\bpositive or negative\b", r"\bpositive, negative\b",
+        r"\bclassify the (tone|emotion|sentiment)\b",
+        r"\bis this (review|tweet|comment)\b",
+        r"\b(positive|negative|neutral)\s+sentiment\b",
+        r"\bemotional tone\b", r"\btone of (this|the|that)\b",
+        r"\bhow (positive|negative)\b",
+        r"\b(mood|emotion|attitude) of (this|the|that)\b",
+        r"\brate the (mood|tone|sentiment)\b",
+    ],
+    "ner": [
+        r"\bnamed entit",
+        r"\bextract (all )?(the )?(entit|name|person|organi|location|date)",
+        r"\blist (all )?(the )?(people|organi[sz]ations?|locations?|dates?)\b",
+        r"\bidentify (the )?(person|organi|location|date|entit)",
+        r"\b(person|org|organization|location|date)\s*[:=]",
+        r"\b(mentioned|named) in (this|the|below)",
+        r"\bpull out (every|all|the)\b",
+        r"\b(company|people|place|person) names?\b",
+    ],
+    "summarization": [
+        r"\bsummari[sz]e\b", r"\bsummary\b", r"\btl;?dr\b", r"\bcondense\b",
+        r"\bin (one|a single|two|three) sentences?\b", r"\bin \d+ words?\b",
+        r"\bshorten\b", r"\bkey points\b", r"\bthe gist\b",
+        r"\bmain (idea|point|takeaway)", r"\bin a (single|one) line\b",
+    ],
+    "logic": [
+        r"\bpuzzle\b", r"\bwho (is|owns|sits|lives|has|drinks)\b",
+        r"\bif and only if\b", r"\bexactly one\b", r"\bat least one\b",
+        r"\beach (person|house|box|day)\b.*\b(exactly|only|one)\b",
+        r"\bconstraints?\b", r"\bdeduce\b", r"\blogically\b",
+        r"\bthe following (clues|facts|statements)\b",
+        r"\beach (have|has|own|owns|is|are)? ?a different\b",
+        r"\bif all \w+ are\b",
+        r"\b(definitely|necessarily) (true|follows?|a)\b",
+    ],
+    "math": [
+        r"\bcalculate\b", r"\bcompute\b", r"\bhow (much|many)\b",
+        r"\bpercent", r"\b\d+\s*%", r"\bsum of\b", r"\baverage\b",
+        r"\bwhat is \d", r"\b\d+\s*[+\-*/x×÷]\s*\d+", r"\bsolve for\b",
+        r"\btotal (cost|price|amount)\b", r"\bratio\b", r"\b\d+\s*:\s*\d+",
+        r"\b(interest|discount)\b",
+        r"\bfind the (largest|smallest|value|angle|area|sum|total)\b",
+        r"\boriginal price\b", r"\bcompound interest\b",
+    ],
 }
+
+# Priority order: specific categories before general fallback
+_PRIORITY_ORDER = [
+    "code_debug", "code_gen", "sentiment", "ner",
+    "summarization", "logic", "math",
+]
+
+_COMPILED_PATTERNS: dict[str, list[re.Pattern]] = {
+    cat: [re.compile(p, re.IGNORECASE) for p in pats]
+    for cat, pats in _CLASSIFIER_PATTERNS.items()
+}
+
+_CODE_FENCE = re.compile(r"```")
+_CODE_HINT = re.compile(
+    r"\b(def |class |function |return |import |#include|public |void |"
+    r"console\.log|printf|System\.out|=>|;\s*$)",
+    re.MULTILINE,
+)
 
 
 def _detect_category(prompt: str) -> str:
-    """Detect the hackathon task category from the prompt text."""
-    p = prompt.lower()
-
-    # Code debugging — check early (code prompts may contain other keywords)
-    if any(kw in p for kw in ["debug", "fix the bug", "bug in", "what is wrong with this code",
-                               "find the error", "fix this code", "buggy",
-                               "incorrect output", "doesn't work"]):
+    """Classify the prompt into one of the 8 hackathon categories."""
+    for cat in _PRIORITY_ORDER:
+        if any(rx.search(prompt) for rx in _COMPILED_PATTERNS[cat]):
+            return cat
+    # Raw code in prompt with no other signals → probably debug
+    if _CODE_FENCE.search(prompt) or _CODE_HINT.search(prompt):
         return "code_debug"
-
-    # Code generation — check early
-    if any(kw in p for kw in ["write a function", "write a program", "implement a",
-                               "write code", "write a python", "write a class",
-                               "write a script", "generate code", "create a function",
-                               "write a method", "code to"]):
-        return "code_gen"
-
-    # Sentiment classification
-    if any(kw in p for kw in ["sentiment", "positive or negative", "classify the feeling",
-                               "is this positive", "is this negative", "tone of",
-                               "classify the sentiment", "sentiment analysis"]):
-        return "sentiment"
-
-    # Named entity recognition — specific keywords only
-    if any(kw in p for kw in ["named entit", "extract entit", " ner ",
-                               "identify the entit", "extract the names",
-                               "person, org", "people, places", "entities in"]):
-        return "ner"
-
-    # Text summarisation
-    if any(kw in p for kw in ["summarise", "summarize", "summary of", "condense",
-                               "in one sentence", "in a few words", "tldr",
-                               "brief overview", "shorten this"]):
-        return "summarization"
-
-    # Mathematical reasoning
-    if any(kw in p for kw in ["calculate", "compute", "what is the value",
-                               "how much does", "how many", "percentage", "profit",
-                               "ratio", "solve for", "equation", "total cost",
-                               "interest rate", "probability of"]):
-        return "math"
-
-    # Logical / deductive reasoning
-    if any(kw in p for kw in ["logic", "deduc", "if all", "must be true",
-                               "which of the following", "constraint",
-                               "puzzle", "who lives in", "who has which",
-                               "given that", "therefore", "conclude",
-                               "can we conclude"]):
-        return "logic"
-
     return "factual"
 
 
+# ---------------------------------------------------------------------------
+# Category config: (system_prompt, max_tokens, model_tier)
+# Tiers: "cheap" = small/fast, "strong" = largest general, "code" = code-spec
+# ---------------------------------------------------------------------------
+
+_BASE = "English only. Be concise; no preamble."
+
+_CATEGORY_CONFIG: dict[str, tuple[str, int, str]] = {
+    "factual": (
+        f"{_BASE} Explain clearly in under 120 words.",
+        300, "strong",
+    ),
+    "math": (
+        f"{_BASE} Brief steps, then 'Answer: <value>' on its own line.",
+        400, "strong",
+    ),
+    "sentiment": (
+        f"{_BASE} Label the sentiment positive, negative, or neutral, "
+        f"then give one short justification.",
+        120, "cheap",
+    ),
+    "summarization": (
+        f"{_BASE} Output only the summary; obey any stated length or format constraint.",
+        220, "cheap",
+    ),
+    "ner": (
+        f"{_BASE} List each entity as 'label: value', one per line; "
+        f"labels: person, organization, location, date.",
+        260, "cheap",
+    ),
+    "code_debug": (
+        f"{_BASE} Name the bug in one sentence, then give the corrected code "
+        f"in one fenced block.",
+        520, "code",
+    ),
+    "logic": (
+        f"{_BASE} Deduce in brief numbered steps checking every constraint, "
+        f"then 'Answer: <value>' on its own line.",
+        420, "strong",
+    ),
+    "code_gen": (
+        f"{_BASE} Output only the code in one fenced block, correct and self-contained.",
+        520, "code",
+    ),
+}
+
+
+# ---------------------------------------------------------------------------
+# Model tiering (dynamically inferred from ALLOWED_MODELS)
+# ---------------------------------------------------------------------------
+
+_MOE_PAT = re.compile(r"(\d+)\s*x\s*(\d+)\s*b\b")
+_ACTIVE_PAT = re.compile(r"\ba(\d+)b\b")
+_DENSE_PAT = re.compile(r"(\d+)\s*b\b")
+_CODE_MODEL_PAT = re.compile(r"\bcode|coder|-code\b")
+_QUANT_PAT = re.compile(r"nvfp4|fp4|fp8|int8|int4|awq|gptq|gguf")
+_NON_CHAT_HINTS = (
+    "embed", "rerank", "whisper", "audio", "tts", "image", "vision",
+    "moderation", "guard", "clip", "diffusion", "flux",
+)
+
+
+def _total_params(model_id: str) -> int:
+    mid = model_id.lower()
+    moe = _MOE_PAT.search(mid)
+    if moe:
+        return int(moe.group(1)) * int(moe.group(2))
+    sizes = [int(m.group(1)) for m in _DENSE_PAT.finditer(mid)]
+    return max(sizes) if sizes else 100  # unknown → treat as frontier
+
+
+def _active_params(model_id: str) -> int:
+    m = _ACTIVE_PAT.search(model_id.lower())
+    return int(m.group(1)) if m else _total_params(model_id)
+
+
+def _resolve_tiers(allowed_models: list[str]) -> dict[str, str]:
+    """
+    Infer cheap / strong / code tiers from ALLOWED_MODELS.
+    Never hardcodes model IDs — works with any set of allowed models.
+    """
+    usable = [m for m in allowed_models
+              if not any(b in m.lower() for b in _NON_CHAT_HINTS)]
+    if not usable:
+        usable = list(allowed_models)
+
+    general = [m for m in usable if not _CODE_MODEL_PAT.search(m.lower())] or usable
+
+    strong = max(
+        general,
+        key=lambda m: (_total_params(m), not bool(_QUANT_PAT.search(m.lower())))
+    )
+    code_models = [m for m in usable if _CODE_MODEL_PAT.search(m.lower())]
+    code = max(code_models, key=_total_params) if code_models else strong
+    cheap = min(
+        usable,
+        key=lambda m: (_active_params(m), not bool(_QUANT_PAT.search(m.lower())))
+    )
+
+    logger.info("Model tiers resolved → cheap=%s | strong=%s | code=%s", cheap, strong, code)
+    return {"cheap": cheap, "strong": strong, "code": code}
+
+
+# ---------------------------------------------------------------------------
+# Remote executor (Fireworks AI)
+# ---------------------------------------------------------------------------
+
 class RemoteExecutor:
-    """Calls the remote API through the OpenAI-compatible SDK."""
+    """
+    Calls the remote Fireworks API with smart model tiering per task category.
+
+    Uses category-specific system prompts and token budgets to match the
+    #1-ranked repository's accuracy while adding token-efficiency on top.
+    Falls back to the strong model if the primary returns a blank answer.
+    """
 
     def __init__(self, config: AppConfig) -> None:
         self._config = config.fireworks
-        self._resolved_model = get_resolved_model(config)
         self._client = OpenAI(
             base_url=self._config.base_url,
             api_key=self._config.api_key,
+            timeout=25.0,   # per-request limit (harness kills at 10 min)
             max_retries=3,
         )
+        # Resolve model tiers once at startup
+        if self._config.allowed_models:
+            self._tiers = _resolve_tiers(self._config.allowed_models)
+        else:
+            # Fallback for local dev without ALLOWED_MODELS
+            fallback = get_resolved_model(config)
+            self._tiers = {"cheap": fallback, "strong": fallback, "code": fallback}
+            logger.warning("ALLOWED_MODELS not set — all tiers use %s", fallback)
 
-    def execute(
+    def _model_for_tier(self, tier: str) -> str:
+        return self._tiers.get(tier, self._tiers["strong"])
+
+    def _call(
         self,
-        task: Task,
-        max_tokens_override: Optional[int] = None,
-        compress: bool = True,
-    ) -> ExecutionResult:
-        """Send the task to the remote model and return the result."""
-        prompt = task.prompt
-
-        # Compress the prompt to save tokens
-        if compress:
-            prompt = compress_prompt(prompt)
-
-        max_tokens = max_tokens_override or self._config.max_tokens
-
-        # No system prompt! Large models perform better on these tasks when not
-        # constrained by an artificial format that might clash with what the judge expects.
-        logger.info(
-            "Remote execution for task %s via %s",
-            task.id, self._resolved_model,
+        model: str,
+        prompt: str,
+        system: str,
+        max_tokens: int,
+    ) -> tuple[str, int, int]:
+        """Make one API call; returns (text, prompt_tokens, completion_tokens)."""
+        response = self._client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=self._config.temperature,
+            max_tokens=max_tokens,
         )
+        usage = response.usage
+        text = (response.choices[0].message.content or "").strip()
+        pt = usage.prompt_tokens if usage else 0
+        ct = usage.completion_tokens if usage else 0
+        return text, pt, ct
+
+    def execute(self, task: Task) -> ExecutionResult:
+        """
+        Classify the task, pick the right model tier, call the API.
+        Falls back to the strong model if the primary model returns blank.
+        """
+        category = _detect_category(task.prompt)
+        system, max_tokens, tier = _CATEGORY_CONFIG.get(
+            category, _CATEGORY_CONFIG["factual"]
+        )
+        primary_model = self._model_for_tier(tier)
+        strong_model = self._model_for_tier("strong")
+
+        logger.info(
+            "Task %s → category=%s tier=%s model=%s max_tokens=%d",
+            task.id, category, tier, primary_model, max_tokens,
+        )
+
         start = time.perf_counter()
+        pt = ct = 0
 
         try:
-            response = self._client.chat.completions.create(
-                model=self._resolved_model,
-                messages=[
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=self._config.temperature,
-                # Intentionally omitting max_tokens so the model isn't truncated
-            )
+            text, pt, ct = self._call(primary_model, task.prompt, system, max_tokens)
 
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            usage = response.usage
-            output_text = response.choices[0].message.content or ""
-
-            return ExecutionResult(
-                output=output_text.strip(),
-                route_used=Route.REMOTE,
-                token_usage=TokenUsage(
-                    prompt_tokens=usage.prompt_tokens if usage else 0,
-                    completion_tokens=usage.completion_tokens if usage else 0,
-                    total_tokens=usage.total_tokens if usage else 0,
-                ),
-                confidence=1.0,
-                latency_ms=elapsed_ms,
-                fallback_triggered=False,
-            )
+            # Fallback: blank answer on primary → retry with strong model
+            if not text and primary_model != strong_model:
+                logger.warning(
+                    "Task %s: primary model returned blank — retrying with strong tier",
+                    task.id,
+                )
+                try:
+                    text2, pt2, ct2 = self._call(
+                        strong_model, task.prompt, system, max_tokens
+                    )
+                    if text2:
+                        text, pt, ct = text2, pt + pt2, ct + ct2
+                except Exception as fb_exc:
+                    logger.error("Task %s: fallback also failed: %s", task.id, fb_exc)
 
         except Exception as exc:
             elapsed_ms = (time.perf_counter() - start) * 1000
@@ -180,50 +341,49 @@ class RemoteExecutor:
                 token_usage=TokenUsage(),
                 confidence=0.0,
                 latency_ms=elapsed_ms,
-                fallback_triggered=False,
+                fallback_triggered=True,
             )
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        return ExecutionResult(
+            output=text,
+            route_used=Route.REMOTE,
+            token_usage=TokenUsage(
+                prompt_tokens=pt,
+                completion_tokens=ct,
+                total_tokens=pt + ct,
+            ),
+            confidence=1.0,
+            latency_ms=elapsed_ms,
+            fallback_triggered=False,
+        )
 
 
 # ---------------------------------------------------------------------------
-# Rule-based executor (dynamic computation only — NO hardcoded answers)
+# Rule-based executor (zero-token math solver)
 # ---------------------------------------------------------------------------
 
 class RuleBasedExecutor:
     """
     Handles tasks that can be solved by pure computation — no model needed.
-
-    IMPORTANT: Per hackathon rules, we must NOT hardcode factual answers.
-    Only dynamic computation (math) is allowed here.
-    Returns None if the task can't be handled by rules.
+    Returns None if the task cannot be handled by rules.
     """
 
-    # Math expressions: "What is 7 + 15?", "Calculate 3 * 4"
     _MATH_PATTERN = re.compile(
         r"^(?:what is|calculate|compute|solve|evaluate)?\s*(\d+(?:\.\d+)?)\s*"
-        r"([\+\-\*\/\^])\s*(\d+(?:\.\d+)?)[^\d\w]*$",
+        r"([+\-*/^])\s*(\d+(?:\.\d+)?)[^\d\w]*$",
         re.I,
     )
 
     def try_execute(self, task: Task) -> Optional[ExecutionResult]:
-        """
-        Try to answer the task with pure computation.
-        Returns None if not possible.
-        """
         prompt = task.prompt.strip()
-
-        # Only attempt math on short prompts that are clearly math questions.
-        # Long prompts with numbers embedded (e.g., summarization tasks) should
-        # NOT be intercepted here.
-        word_count = len(prompt.split())
-        if word_count <= 20:
+        if len(prompt.split()) <= 20:
             result = self._try_math(prompt)
             if result is not None:
                 return result
-
         return None
 
     def _make_result(self, output: str) -> ExecutionResult:
-        """Create a zero-cost execution result."""
         return ExecutionResult(
             output=output,
             route_used=Route.LOCAL,
@@ -251,291 +411,40 @@ class RuleBasedExecutor:
                 result = a ** b
             else:
                 return None
-            # Format as int if whole number
-            answer = str(int(result)) if result == int(result) else str(result)
+            answer = str(int(result)) if result == int(result) else str(round(result, 6))
             return self._make_result(answer)
         except Exception:
             return None
 
 
 # ---------------------------------------------------------------------------
-# Local executor (HuggingFace transformers)
-# ---------------------------------------------------------------------------
-
-class LocalExecutor:
-    """
-    Runs a local HuggingFace model for inference.
-
-    The model is lazily loaded on first call to avoid slow container
-    startup when the local path isn't needed.
-    """
-
-    def __init__(self, config: AppConfig) -> None:
-        self._config = config.local_model
-        self._model: Optional[object] = None
-        self._tokenizer: Optional[object] = None
-        self._load_failed: bool = False
-
-    def _load_model(self) -> None:
-        """Lazy-load the model and tokenizer."""
-        if self._model is not None:
-            return
-        if self._load_failed:
-            return
-
-        logger.info("Loading local model: %s", self._config.model_name)
-        start = time.perf_counter()
-
-        try:
-            import torch
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-
-            dtype_map = {
-                "float16": torch.float16,
-                "bfloat16": torch.bfloat16,
-                "float32": torch.float32,
-                "auto": "auto",
-            }
-            torch_dtype = dtype_map.get(self._config.torch_dtype, "auto")
-
-            self._tokenizer = AutoTokenizer.from_pretrained(
-                self._config.model_name,
-                trust_remote_code=True,
-            )
-            self._model = AutoModelForCausalLM.from_pretrained(
-                self._config.model_name,
-                torch_dtype=torch_dtype,
-                device_map=self._config.device,
-                trust_remote_code=True,
-            )
-
-            elapsed = (time.perf_counter() - start) * 1000
-            logger.info("Local model loaded in %.0fms", elapsed)
-
-        except Exception as exc:
-            logger.error("Failed to load local model: %s", exc)
-            self._load_failed = True
-            raise
-
-    def execute(
-        self,
-        task: Task,
-        max_new_tokens_override: Optional[int] = None,
-    ) -> ExecutionResult:
-        """Run the task through the local model."""
-        self._load_model()
-        logger.info("Local execution for task %s", task.id)
-        start = time.perf_counter()
-
-        max_new_tokens = max_new_tokens_override or self._config.max_new_tokens
-
-        try:
-            import torch
-
-            tokenizer = self._tokenizer
-            model = self._model
-
-            # Build chat-style prompt
-            messages = [{"role": "user", "content": task.prompt}]
-
-            # Use chat template if available, else fall back to raw prompt
-            if hasattr(tokenizer, "apply_chat_template"):
-                input_text = tokenizer.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=True
-                )
-            else:
-                input_text = f"User: {task.prompt}\nAssistant:"
-
-            inputs = tokenizer(input_text, return_tensors="pt")
-            input_ids = inputs["input_ids"].to(model.device)
-            prompt_len = input_ids.shape[1]
-
-            with torch.no_grad():
-                outputs = model.generate(
-                    input_ids,
-                    max_new_tokens=max_new_tokens,
-                    temperature=max(self._config.temperature, 0.01),
-                    do_sample=self._config.temperature > 0,
-                    pad_token_id=tokenizer.eos_token_id,
-                    output_scores=True,
-                    return_dict_in_generate=True,
-                )
-
-            # Decode only the generated tokens (not the prompt)
-            generated_ids = outputs.sequences[0][prompt_len:]
-            output_text = tokenizer.decode(
-                generated_ids, skip_special_tokens=True
-            )
-            completion_tokens = len(generated_ids)
-
-            # Estimate confidence from output logits
-            confidence = self._estimate_confidence(outputs)
-
-            elapsed_ms = (time.perf_counter() - start) * 1000
-
-            return ExecutionResult(
-                output=output_text.strip(),
-                route_used=Route.LOCAL,
-                token_usage=TokenUsage(
-                    prompt_tokens=prompt_len,
-                    completion_tokens=completion_tokens,
-                    total_tokens=prompt_len + completion_tokens,
-                ),
-                confidence=confidence,
-                latency_ms=elapsed_ms,
-                fallback_triggered=False,
-            )
-
-        except Exception as exc:
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            logger.error("Local execution failed for task %s: %s", task.id, exc)
-            return ExecutionResult(
-                output=f"[ERROR] Local model failed: {exc}",
-                route_used=Route.LOCAL,
-                confidence=0.0,
-                latency_ms=elapsed_ms,
-                fallback_triggered=False,
-            )
-
-    @staticmethod
-    def _estimate_confidence(outputs: object) -> float:
-        """
-        Estimate confidence from generation scores.
-
-        Uses the mean of the top-1 softmax probabilities across generated
-        tokens as a rough confidence proxy.
-        """
-        try:
-            import torch
-
-            if not hasattr(outputs, "scores") or not outputs.scores:
-                return 0.5
-
-            confidences = []
-            for score in outputs.scores:
-                probs = torch.softmax(score[0], dim=-1)
-                top_prob = probs.max().item()
-                confidences.append(top_prob)
-
-            if not confidences:
-                return 0.5
-
-            return sum(confidences) / len(confidences)
-
-        except Exception:
-            return 0.5
-
-
-# ---------------------------------------------------------------------------
-# Output verifier (for cascading execution)
-# ---------------------------------------------------------------------------
-
-class OutputVerifier:
-    """
-    Lightweight output verification — checks if a local model response
-    looks "good enough" without using another LLM.
-
-    This enables cascading: local → verify → escalate only if bad.
-    """
-
-    @staticmethod
-    def verify(task: Task, result: ExecutionResult) -> bool:
-        """
-        Returns True if the output passes basic quality checks.
-        Returns False if it should be escalated to the remote model.
-        """
-        output = result.output.strip()
-
-        # 1. Empty or error output → fail
-        if not output or output.startswith("[ERROR]"):
-            return False
-
-        # 2. Too short for the prompt complexity
-        prompt_words = len(task.prompt.split())
-        output_words = len(output.split())
-
-        # If prompt is non-trivial but output is suspiciously tiny → fail
-        if prompt_words > 15 and output_words < 2:
-            return False
-
-        # Ratio check: output should be at least ~5% of prompt for complex tasks
-        if prompt_words > 30 and output_words < max(3, prompt_words * 0.05):
-            return False
-
-        # 3. Repetition detection — if the output repeats itself excessively
-        if OutputVerifier._has_excessive_repetition(output):
-            return False
-
-        # 4. Confidence-based (already handled elsewhere, but double-check)
-        if result.confidence < 0.10:
-            return False
-
-        # 5. Gibberish detection — high ratio of non-alphanumeric chars
-        alnum_ratio = sum(c.isalnum() or c.isspace() for c in output) / max(len(output), 1)
-        if alnum_ratio < 0.5:
-            return False
-
-        return True
-
-    @staticmethod
-    def _has_excessive_repetition(text: str) -> bool:
-        """Check if text contains excessive repetition (degenerate output)."""
-        words = text.split()
-        if len(words) < 10:
-            return False
-
-        # Check if any single word repeats more than 40% of the time
-        from collections import Counter
-        counts = Counter(words)
-        most_common_count = counts.most_common(1)[0][1]
-        if most_common_count / len(words) > 0.4:
-            return True
-
-        # Check for repeated n-grams (3-word sequences)
-        trigrams = [" ".join(words[i:i+3]) for i in range(len(words) - 2)]
-        if trigrams:
-            trigram_counts = Counter(trigrams)
-            most_common_tri = trigram_counts.most_common(1)[0][1]
-            if most_common_tri > 3 and most_common_tri / len(trigrams) > 0.3:
-                return True
-
-        return False
-
-
-# ---------------------------------------------------------------------------
-# Hybrid executor (orchestrator with all optimizations)
+# Hybrid executor (orchestrator)
 # ---------------------------------------------------------------------------
 
 class HybridExecutor:
     """
-    Orchestrates local and remote execution with full optimization stack:
+    Orchestrates execution with the full optimization stack:
 
     1. Cache check → instant free response if hit
-    2. Route decision → local or remote
-    3. If local: execute → verify output → fallback to remote if bad
-    4. If remote: compress prompt → dynamic token budget → execute
-    5. Cache the result for future hits
+    2. Rule-based fast path → zero-token math answers
+    3. Remote execution → smart tiering + category prompts + fallback
+    4. Cache the result for future deduplication
     """
 
     def __init__(self, config: AppConfig) -> None:
         self._config = config
         self._rules = RuleBasedExecutor()
-        self._local = LocalExecutor(config)
         self._remote = RemoteExecutor(config)
         self._cache = ResponseCache(enabled=config.cache_enabled)
-        self._verifier = OutputVerifier()
-        self._fallback_threshold = config.router.confidence_fallback_threshold
-        self._compression_enabled = config.compression_enabled
 
     @property
     def cache(self) -> ResponseCache:
-        """Expose cache for stats reporting."""
         return self._cache
 
     def execute(
         self, task: Task, decision: RoutingDecision
     ) -> ExecutionResult:
-        """Execute the task with full optimization pipeline."""
+        """Execute the task with the full optimization pipeline."""
 
         # ── Step 1: Cache check ──
         cached = self._cache.get(task.prompt)
@@ -543,24 +452,14 @@ class HybridExecutor:
             logger.info("Task %s: served from cache (0 tokens)", task.id)
             return cached
 
-        # Compute dynamic token budget
-        token_budget = estimate_token_budget(task, decision)
-
-        # ── Step 2: Rule-based fast path (instant, free, no GPU) ──
+        # ── Step 2: Rule-based fast path (0 tokens for simple math) ──
         rule_result = self._rules.try_execute(task)
         if rule_result is not None:
             logger.info("Task %s: answered by rule-based executor (0 tokens)", task.id)
             self._cache.put(task.prompt, rule_result)
             return rule_result
 
-        # ── Step 3: Remote execution ──
-        # Always use the remote Fireworks API for non-rule tasks.
-        # The local HuggingFace model is skipped because the evaluation
-        # container has no GPU and cannot download the ~5GB model in time.
-        result = self._remote.execute(
-            task,
-            max_tokens_override=token_budget,
-            compress=False,  # Disable compression to preserve prompt accuracy
-        )
+        # ── Step 3: Remote execution with smart model tiering ──
+        result = self._remote.execute(task)
         self._cache.put(task.prompt, result)
         return result
