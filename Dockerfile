@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Download the model using python script and copy the real file to avoid broken symlinks
 RUN mkdir -p /models && \
-    python -c "import shutil; from huggingface_hub import hf_hub_download; path = hf_hub_download(repo_id='Qwen/Qwen2.5-3B-Instruct-GGUF', filename='qwen2.5-3b-instruct-q4_k_m.gguf'); shutil.copy(path, '/models/qwen2.5-3b-instruct-q4_k_m.gguf')"
+    python -c "import shutil; from huggingface_hub import hf_hub_download; path = hf_hub_download(repo_id='Qwen/Qwen2.5-0.5B-Instruct-GGUF', filename='qwen2.5-0.5b-instruct-q4_k_m.gguf'); shutil.copy(path, '/models/model.gguf')"
 
 # Stage 2: Final
 FROM python:3.11-slim
@@ -43,7 +43,7 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy the downloaded model from builder
-COPY --from=builder /models/qwen2.5-3b-instruct-q4_k_m.gguf /app/models/model.gguf
+COPY --from=builder /models/model.gguf /app/models/model.gguf
 
 # Copy application code
 COPY agent/ ./agent/

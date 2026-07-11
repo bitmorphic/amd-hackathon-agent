@@ -131,40 +131,40 @@ def _detect_category(prompt: str) -> str:
 # Tiers: "cheap" = small/fast, "strong" = largest general, "code" = code-spec
 # ---------------------------------------------------------------------------
 
-_BASE = "Answer in English. Be concise and direct; no preamble, no restating the question."
+_BASE = "Answer only. No intro. No explanation."
 
 _CATEGORY_CONFIG: dict[str, tuple[str, int, str]] = {
     "factual": (
-        f"{_BASE} Give a correct, clear answer in under 120 words.",
-        320, "strong",
+        f"{_BASE} Be pedantically accurate. Ignore all social pleasantries.",
+        96, "strong",
     ),
     "math": (
-        f"{_BASE} Work through it in brief steps, then end with 'Answer: <value>' on its own line.",
-        400, "strong",
+        f"{_BASE} Final value only. No symbols, no units, no words. Just digits.",
+        64, "strong",
     ),
     "sentiment": (
-        f"{_BASE} State the sentiment as positive, negative, or neutral, then one short reason.",
-        120, "cheap",
+        f"Return single word: positive, negative, neutral.",
+        16, "cheap",
     ),
     "summarization": (
-        f"{_BASE} Output only the summary and obey any length or format constraint stated in the task.",
-        240, "cheap",
+        f"{_BASE} Condense to absolute essence. Eliminate all fluff.",
+        160, "cheap",
     ),
     "ner": (
-        f"{_BASE} List each entity as 'label: value', one per line, using the labels person, organization, location, date.",
-        260, "cheap",
+        f"{_BASE} Extract raw values only. Delimit by comma if multiple.",
+        96, "cheap",
     ),
     "code_debug": (
-        f"{_BASE} State the bug in one sentence, then give the corrected code in a single fenced block.",
-        520, "code",
+        f"Provide only the corrected code block. No Markdown. No comments. Minimalist.",
+        500, "code",
     ),
     "logic": (
-        f"{_BASE} Reason in brief numbered steps, checking each constraint, then end with 'Answer: <value>' on its own line.",
-        460, "strong",
+        f"{_BASE} Output final result only. Do not show reasoning logic.",
+        128, "strong",
     ),
     "code_gen": (
-        f"{_BASE} Output only the code in a single fenced block — correct, complete, and self-contained.",
-        520, "code",
+        f"Output raw code only. No text outside logic. No Markdown. Concise.",
+        600, "code",
     ),
 }
 
