@@ -31,7 +31,7 @@ from pathlib import Path
 
 INPUT_PATH = os.getenv("INPUT_PATH", "/input/tasks.json")
 OUTPUT_PATH = os.getenv("OUTPUT_PATH", "/output/results.json")
-MAX_RUNTIME_SECONDS = 570  # 9.5 min safety margin (limit is 10 min)
+MAX_RUNTIME_SECONDS = 330  # 5.5 min safety margin (evaluator kills at 6 min)
 
 
 def setup_logging() -> None:
@@ -143,17 +143,20 @@ def main() -> int:
             logger.error("Task %s failed: %s", task.id, exc)
             return {"task_id": task.id, "answer": ""}
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(_process_task, task) for task in tasks]
+    pool = ThreadPoolExecutor(max_workers=8)
+    futures = [pool.submit(_process_task, task) for task in tasks]
 
-        for i, fut in enumerate(futures):
-            try:
-                # Ensure we leave enough time to write results.json
-                timeout = max(1.0, deadline - time.monotonic())
-                results.append(fut.result(timeout=timeout))
-            except Exception as exc:
-                logger.error("Task %s timed out or failed: %s", tasks[i].id, exc)
-                results.append({"task_id": tasks[i].id, "answer": ""})
+    for i, fut in enumerate(futures):
+        try:
+            # Ensure we leave enough time to write results.json
+            timeout = max(0.1, deadline - time.monotonic())
+            results.append(fut.result(timeout=timeout))
+        except Exception as exc:
+            logger.error("Task %s timed out or failed: %s", tasks[i].id, exc)
+            results.append({"task_id": tasks[i].id, "answer": ""})
+            
+    # Do NOT wait for stuck threads, just cancel pending and move on so we can write output
+    pool.shutdown(wait=False, cancel_futures=True)
 
     # ── Step 5: Write output ──
     try:
