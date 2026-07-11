@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Download the model using python script and copy the real file to avoid broken symlinks
 RUN mkdir -p /models && \
-    python -c "import shutil; from huggingface_hub import hf_hub_download; path = hf_hub_download(repo_id='Qwen/Qwen2.5-0.5B-Instruct-GGUF', filename='qwen2.5-0.5b-instruct-q4_k_m.gguf'); shutil.copy(path, '/models/model.gguf')"
+    python -c "import shutil; from huggingface_hub import hf_hub_download; path = hf_hub_download(repo_id='Qwen/Qwen2.5-0.5B-Instruct-GGUF', filename='qwen2.5-0.5b-instruct-q4_0.gguf'); shutil.copy(path, '/models/model.gguf')"
 
 # Stage 2: Final
 FROM python:3.11-slim
