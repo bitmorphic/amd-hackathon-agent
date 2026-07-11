@@ -30,6 +30,7 @@ from agent.models import (
     Task,
     TokenUsage,
 )
+from agent.local_model import LocalModelProvider
 
 logger = logging.getLogger(__name__)
 
@@ -440,24 +441,14 @@ class RuleBasedExecutor:
 # ---------------------------------------------------------------------------
 
 class HybridExecutor:
-    """
-    Orchestrates execution with the full optimization stack:
-
-    1. Cache check → instant free response if hit
-    2. Rule-based fast path → zero-token math answers
-    3. Remote execution → smart tiering + category prompts + fallback
-    4. Cache the result for future deduplication
-    """
+    """Orchestrates caching, rule-based, local CPU, and tiered remote models."""
 
     def __init__(self, config: AppConfig) -> None:
         self._config = config
         self._rules = RuleBasedExecutor()
         self._remote = RemoteExecutor(config)
         self._cache = ResponseCache(enabled=config.cache_enabled)
-
-    @property
-    def cache(self) -> ResponseCache:
-        return self._cache
+        self._local = LocalModelProvider()
 
     def execute(
         self, task: Task, decision: RoutingDecision
@@ -477,7 +468,15 @@ class HybridExecutor:
             self._cache.put(task.prompt, rule_result)
             return rule_result
 
-        # ── Step 3: Remote execution with smart model tiering ──
+        # ── Step 3: Local CPU model (0 tokens for easy tasks) ──
+        category = _detect_category(task.prompt)
+        local_result = self._local.answer(task, category)
+        if local_result is not None:
+            logger.info("Task %s: answered by local CPU model (0 tokens)", task.id)
+            self._cache.put(task.prompt, local_result)
+            return local_result
+
+        # ── Step 4: Remote execution with smart model tiering ──
         result = self._remote.execute(task)
         self._cache.put(task.prompt, result)
         return result
