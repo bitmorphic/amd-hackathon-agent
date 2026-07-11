@@ -23,9 +23,9 @@ COPY requirements.txt .
 # Install dependencies into venv
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download the model using huggingface-cli
+# Download the model using python script to avoid huggingface-cli deprecation errors
 RUN mkdir -p /models && \
-    huggingface-cli download Qwen/Qwen2.5-3B-Instruct-GGUF qwen2.5-3b-instruct-q4_k_m.gguf --local-dir /models --local-dir-use-symlinks False
+    python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='Qwen/Qwen2.5-3B-Instruct-GGUF', filename='qwen2.5-3b-instruct-q4_k_m.gguf', local_dir='/models')"
 
 # Stage 2: Final
 FROM python:3.11-slim
