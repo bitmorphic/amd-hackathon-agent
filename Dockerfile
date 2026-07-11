@@ -15,9 +15,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     && rm -rf /var/lib/apt/lists/*
 
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 COPY requirements.txt .
-# Install dependencies into /install
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+# Install dependencies into venv
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Download the model using huggingface-cli
 RUN mkdir -p /models && \
@@ -29,7 +33,8 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Copy python dependencies from builder
-COPY --from=builder /install /usr/local
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy the downloaded model from builder
 COPY --from=builder /models/qwen2.5-3b-instruct-q4_k_m.gguf /app/models/model.gguf
