@@ -34,7 +34,7 @@ class FireworksConfig:
     model: str = field(
         default_factory=lambda: os.getenv(
             "FIREWORKS_MODEL",
-            "accounts/fireworks/models/llama-v3p1-8b-instruct",
+            "accounts/fireworks/models/llama-v3.1-8b-instruct",
         )
     )
     allowed_models: list[str] = field(

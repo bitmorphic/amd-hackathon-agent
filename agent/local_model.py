@@ -68,7 +68,7 @@ class LocalModelProvider:
             return None
             
         started = time.perf_counter()
-        prompt = task.input
+        prompt = task.prompt
         
         # Add basic instruction for specific categories to ensure strict formatting
         if category == "sentiment":
