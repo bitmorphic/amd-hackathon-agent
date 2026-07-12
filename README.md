@@ -6,6 +6,8 @@
   
   <h3>TERA (Token-Efficient Routing Agent)</h3>
   <b>AMD Developer Hackathon: ACT II — Track 1: Hybrid Token-Efficient Routing Agent</b>
+  <b>Team:</b> Brute Force<br>
+  <b>Participant:</b> Mohammad Anas (Solo Member)
   <br><br>
 
   <img src="https://img.shields.io/badge/AMD-000000?style=for-the-badge&logo=amd&logoColor=white" alt="AMD" />
