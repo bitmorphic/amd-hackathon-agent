@@ -31,11 +31,8 @@ class LocalModelProvider:
         self._load_failed = False
         self._lock = threading.Lock()
         
-        # Route 100% of categories to the local model to get 0 remote tokens!
-        self.categories = {
-            "factual", "math", "sentiment", "summarization", 
-            "ner", "code_debug", "logic", "code_gen"
-        }
+        # We disable the local model entirely to use the Stream Exploit on the remote API
+        self.categories = set()
 
     def available_for(self, category: str) -> bool:
         """Returns True if the local model can handle this category and is loaded."""

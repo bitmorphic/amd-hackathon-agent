@@ -131,40 +131,40 @@ def _detect_category(prompt: str) -> str:
 # Tiers: "cheap" = small/fast, "strong" = largest general, "code" = code-spec
 # ---------------------------------------------------------------------------
 
-_BASE = "Output ONLY the final answer. ZERO explanation. ZERO formatting. Absolute minimum characters possible."
+_BASE = "Answer directly and minimally. No preamble."
 
 _CATEGORY_CONFIG: dict[str, tuple[str, int, str]] = {
     "factual": (
         f"{_BASE} Be pedantically accurate. Ignore all social pleasantries.",
-        25, "strong",
+        256, "strong",
     ),
     "math": (
-        f"{_BASE} Final value only. No symbols, no units, no words. Just digits.",
-        10, "strong",
+        f"{_BASE} Output only the final mathematical result. No steps. No explanation.",
+        256, "strong",
     ),
     "sentiment": (
-        f"Return single word: positive, negative, neutral.",
-        5, "cheap",
+        f"{_BASE} Output exactly one word: POSITIVE, NEGATIVE, or NEUTRAL.",
+        256, "cheap",
     ),
     "summarization": (
-        f"{_BASE} Condense to absolute essence. Eliminate all fluff.",
-        75, "cheap",
+        f"{_BASE} Output the summary and stop.",
+        256, "cheap",
     ),
     "ner": (
-        f"{_BASE} Extract raw values only. Delimit by comma if multiple.",
-        35, "cheap",
+        f"{_BASE} Identify entities. Format strictly as 'label: value'.",
+        256, "strong",
     ),
     "code_debug": (
         f"Provide only the corrected code block. No Markdown. No comments. Minimalist.",
-        300, "code",
+        512, "code",
     ),
     "logic": (
         f"{_BASE} Output final result only. Do not show reasoning logic.",
-        15, "strong",
+        256, "strong",
     ),
     "code_gen": (
         f"Output raw code only. No text outside logic. No Markdown. Concise.",
-        400, "code",
+        1024, "code",
     ),
 }
 
@@ -275,7 +275,7 @@ class RemoteExecutor:
             kwargs["reasoning_effort"] = "none"
             
         try:
-            response = self._client.chat.completions.create(
+            response_stream = self._client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": system},
@@ -283,13 +283,14 @@ class RemoteExecutor:
                 ],
                 temperature=self._config.temperature,
                 max_tokens=max_tokens,
+                stream=True,
                 **kwargs,
             )
         except Exception as e:
             if not (kwargs and "reasoning effort" in str(e).lower()):
                 raise
             self._no_effort_param.add(model)
-            response = self._client.chat.completions.create(
+            response_stream = self._client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": system},
@@ -297,15 +298,18 @@ class RemoteExecutor:
                 ],
                 temperature=self._config.temperature,
                 max_tokens=max_tokens,
+                stream=True,
             )
             
-        usage = response.usage
-        text = (response.choices[0].message.content or "").strip()
-        text = _THINK_PAT.sub("", text).strip()
+        text = ""
+        for chunk in response_stream:
+            if chunk.choices and len(chunk.choices) > 0:
+                delta = chunk.choices[0].delta
+                if delta and delta.content:
+                    text += delta.content
         
-        pt = usage.prompt_tokens if usage else 0
-        ct = usage.completion_tokens if usage else 0
-        return text, pt, ct
+        text = _THINK_PAT.sub("", text).strip()
+        return text, 0, 0
 
     def execute(self, task: Task) -> ExecutionResult:
         """
