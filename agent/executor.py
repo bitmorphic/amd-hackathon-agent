@@ -136,35 +136,35 @@ _BASE = "Answer directly and minimally. No preamble."
 _CATEGORY_CONFIG: dict[str, tuple[str, int, str]] = {
     "factual": (
         f"{_BASE} Be pedantically accurate. Ignore all social pleasantries.",
-        256, "strong",
+        512, "strong",
     ),
     "math": (
         f"{_BASE} Output only the final mathematical result. No steps. No explanation.",
-        256, "strong",
+        2048, "strong",
     ),
     "sentiment": (
         f"{_BASE} Output exactly one word: POSITIVE, NEGATIVE, or NEUTRAL.",
-        256, "cheap",
+        512, "strong",
     ),
     "summarization": (
         f"{_BASE} Output the summary and stop.",
-        256, "cheap",
+        512, "strong",
     ),
     "ner": (
         f"{_BASE} Identify entities. Format strictly as 'label: value'.",
-        256, "strong",
+        512, "strong",
     ),
     "code_debug": (
         f"Provide only the corrected code block. No Markdown. No comments. Minimalist.",
-        512, "code",
+        2048, "strong",
     ),
     "logic": (
         f"{_BASE} Output final result only. Do not show reasoning logic.",
-        256, "strong",
+        2048, "strong",
     ),
     "code_gen": (
         f"Output raw code only. No text outside logic. No Markdown. Concise.",
-        1024, "code",
+        2048, "strong",
     ),
 }
 
@@ -270,37 +270,19 @@ class RemoteExecutor:
         max_tokens: int,
     ) -> tuple[str, int, int]:
         """Make one API call; returns (text, prompt_tokens, completion_tokens)."""
+        # Do not force reasoning_effort="none" as it breaks reasoning models' accuracy or raises errors
         kwargs = {}
-        if model not in self._no_effort_param:
-            kwargs["reasoning_effort"] = "none"
-            
-        try:
-            response_stream = self._client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=self._config.temperature,
-                max_tokens=max_tokens,
-                stream=True,
-                **kwargs,
-            )
-        except Exception as e:
-            if not (kwargs and "reasoning effort" in str(e).lower()):
-                raise
-            self._no_effort_param.add(model)
-            response_stream = self._client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=self._config.temperature,
-                max_tokens=max_tokens,
-                stream=True,
-            )
-            
+        response_stream = self._client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=self._config.temperature,
+            max_tokens=max_tokens,
+            stream=True,
+            **kwargs,
+        )
         text = ""
         for chunk in response_stream:
             if chunk.choices and len(chunk.choices) > 0:
