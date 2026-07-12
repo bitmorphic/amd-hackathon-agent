@@ -8,27 +8,15 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-# Install build dependencies for llama-cpp-python and Vulkan support for AMD GPUs
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    g++ \
-    make \
-    cmake \
-    vulkan-tools libvulkan1 mesa-vulkan-drivers vulkan-validationlayers \
-    && rm -rf /var/lib/apt/lists/*
-
 # Create virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install python dependencies with Vulkan GPU acceleration enabled
-ENV CMAKE_ARGS="-DLLAMA_VULKAN=on"
 COPY requirements.txt .
 # Install dependencies into venv
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download the model using python script and copy the real file to avoid broken symlinks
-RUN mkdir -p /models && \
-    python -c "import shutil; from huggingface_hub import hf_hub_download; path = hf_hub_download(repo_id='Qwen/Qwen2.5-1.5B-Instruct-GGUF', filename='qwen2.5-1.5b-instruct-q4_k_m.gguf'); shutil.copy(path, '/models/model.gguf')"
+
 
 # Stage 2: Final
 FROM python:3.11-slim
@@ -41,17 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install runtime dependencies for Vulkan
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libvulkan1 \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy python dependencies from builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-
-# Copy the downloaded model from builder
-COPY --from=builder /models/model.gguf /app/models/model.gguf
 
 # Copy application code
 COPY agent/ ./agent/
