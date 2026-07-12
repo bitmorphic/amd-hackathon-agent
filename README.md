@@ -5,8 +5,7 @@
   <br><br>
   
   <h3>TERA (Token-Efficient Routing Agent)</h3>
-  <b>AMD Developer Hackathon: ACT II — Track 1: Hybrid Token-Efficient Routing Agent</b><br>
-  <b>Team:</b> Brute Force
+  <b>AMD Developer Hackathon: ACT II — Track 1: Hybrid Token-Efficient Routing Agent</b>
   <br><br>
 
   <img src="https://img.shields.io/badge/AMD-000000?style=for-the-badge&logo=amd&logoColor=white" alt="AMD" />
