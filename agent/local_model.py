@@ -16,9 +16,17 @@ LOCAL_MODEL_SYSTEM = (
 class LocalModelProvider:
     def __init__(self):
         self.model_path = os.getenv("LOCAL_MODEL_PATH", "/app/models/model.gguf")
-        self.max_tokens = 15  # Extreme token starvation to avoid timeouts
+        self.max_tokens = 256  # Give enough tokens to answer correctly
         self.n_ctx = 2048
-        self.n_threads = int(os.cpu_count() or 8)  # Maximize CPU usage
+        
+        # In Docker, os.cpu_count() returns host CPUs (e.g. 64), which causes massive 
+        # context-switching thrashing if the container only has 2-4 vCPUs.
+        try:
+            allowed_cpus = len(os.sched_getaffinity(0))
+        except AttributeError:
+            allowed_cpus = os.cpu_count() or 4
+        self.n_threads = min(8, allowed_cpus)  # Safe limit to avoid thrashing
+        
         self._llm = None
         self._load_failed = False
         self._lock = threading.Lock()
@@ -73,12 +81,13 @@ class LocalModelProvider:
         prompt = task.prompt
         
         # Add basic instruction for specific categories to ensure strict formatting
+        # Add basic instruction for specific categories to ensure strict formatting
         if category == "sentiment":
-            prompt = "State the sentiment as positive, negative, or neutral, then one short reason.\n\n" + prompt
+            prompt = "State ONLY the sentiment: positive, negative, or neutral.\n\n" + prompt
         elif category == "ner":
-            prompt = "List each entity as 'label: value', one per line, using the labels person, organization, location, date.\n\n" + prompt
+            prompt = "List entities as 'label: value'. Labels: person, organization, location, date.\n\n" + prompt
         elif category == "summarization":
-            prompt = "Output only the summary and obey any length or format constraint stated in the task.\n\n" + prompt
+            prompt = "Output only the summary.\n\n" + prompt
             
         try:
             with self._lock:

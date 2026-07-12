@@ -8,17 +8,20 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-# Install build dependencies for llama-cpp-python
+# Install build dependencies for llama-cpp-python and Vulkan support for AMD GPUs
 RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     make \
     cmake \
+    vulkan-tools libvulkan1 mesa-vulkan-drivers vulkan-validationlayers \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Install python dependencies with Vulkan GPU acceleration enabled
+ENV CMAKE_ARGS="-DLLAMA_VULKAN=on"
 COPY requirements.txt .
 # Install dependencies into venv
 RUN pip install --no-cache-dir -r requirements.txt
@@ -36,6 +39,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install runtime dependencies for Vulkan
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libvulkan1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy python dependencies from builder
