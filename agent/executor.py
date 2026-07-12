@@ -131,40 +131,40 @@ def _detect_category(prompt: str) -> str:
 # Tiers: "cheap" = small/fast, "strong" = largest general, "code" = code-spec
 # ---------------------------------------------------------------------------
 
-_BASE = "Answer only. No intro. No explanation."
+_BASE = "Output ONLY the final answer. ZERO explanation. ZERO formatting. Absolute minimum characters possible."
 
 _CATEGORY_CONFIG: dict[str, tuple[str, int, str]] = {
     "factual": (
         f"{_BASE} Be pedantically accurate. Ignore all social pleasantries.",
-        96, "strong",
+        25, "strong",
     ),
     "math": (
         f"{_BASE} Final value only. No symbols, no units, no words. Just digits.",
-        64, "strong",
+        10, "strong",
     ),
     "sentiment": (
         f"Return single word: positive, negative, neutral.",
-        16, "cheap",
+        5, "cheap",
     ),
     "summarization": (
         f"{_BASE} Condense to absolute essence. Eliminate all fluff.",
-        160, "cheap",
+        75, "cheap",
     ),
     "ner": (
         f"{_BASE} Extract raw values only. Delimit by comma if multiple.",
-        96, "cheap",
+        35, "cheap",
     ),
     "code_debug": (
         f"Provide only the corrected code block. No Markdown. No comments. Minimalist.",
-        500, "code",
+        300, "code",
     ),
     "logic": (
         f"{_BASE} Output final result only. Do not show reasoning logic.",
-        128, "strong",
+        15, "strong",
     ),
     "code_gen": (
         f"Output raw code only. No text outside logic. No Markdown. Concise.",
-        600, "code",
+        400, "code",
     ),
 }
 
