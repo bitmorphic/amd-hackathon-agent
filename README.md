@@ -1,5 +1,7 @@
 <div align="center">
-  <img src="assets/banner.png" alt="AMD Developer Hackathon" width="100%">
+  <img src="assets/banner.png" alt="AMD Developer Hackathon" width="60%">
+  <br><br>
+  <img src="assets/tera_icon.png" alt="TERA Logo" width="180">
 </div>
 
 # TERA (Token-Efficient Routing Agent)
