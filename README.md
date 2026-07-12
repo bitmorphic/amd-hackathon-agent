@@ -1,17 +1,18 @@
 <div align="center">
+  <img src="assets/banner.png" alt="AMD Developer Hackathon" width="80%">
+  <br><br>
   <img src="assets/tera_icon_transparent.png" alt="TERA Logo" width="180">
-</div>
+  <br><br>
+  
+  <h3>TERA (Token-Efficient Routing Agent)</h3>
+  <b>AMD Developer Hackathon: ACT II — Track 1: Hybrid Token-Efficient Routing Agent</b><br>
+  <b>Team:</b> Brute Force
+  <br><br>
 
-# TERA (Token-Efficient Routing Agent)
-
-**AMD Developer Hackathon: ACT II — Track 1: Hybrid Token-Efficient Routing Agent**  
-**Team:** Brute Force
-
-<div align="center">
+  <img src="https://img.shields.io/badge/AMD-000000?style=for-the-badge&logo=amd&logoColor=white" alt="AMD" />
+  <img src="https://img.shields.io/badge/Google_DeepMind-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google DeepMind" />
   <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
-  <img src="https://img.shields.io/badge/Fireworks_AI-FF6B6B?style=for-the-badge&logo=fireworks&logoColor=white" alt="Fireworks AI" />
-  <img src="https://img.shields.io/badge/Llama_3-0466C8?style=for-the-badge&logo=meta&logoColor=white" alt="Llama 3" />
 </div>
 
 <br/>
