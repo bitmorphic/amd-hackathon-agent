@@ -22,17 +22,17 @@
 
 An ultra-fast, token-efficient AI agent designed to conquer all 8 hackathon capability categories. TERA uses a **Regex-Based Classifier** and **Smart Model Tiering** to achieve maximum accuracy while mathematically minimizing token costs.
 
-## 🔥 The Winning Architecture
+##  The Winning Architecture
 
 To achieve an 85%+ accuracy score while maintaining the lowest possible token usage, TERA relies on a 5-pillar architecture:
 
-### 1. ⚡ 8-Worker Concurrency
+### 1.  8-Worker Concurrency
 The container utilizes a `ThreadPoolExecutor` with 8 parallel workers. This allows TERA to process all tasks in the harness in < 15 seconds, completely eliminating timeout crashes.
 
-### 2. 🧠 Comprehensive Regex Classifier
+### 2.  Comprehensive Regex Classifier
 Instead of blindly sending prompts to an LLM, TERA runs a lightning-fast regex pass (80+ patterns) over every prompt to classify it into one of the 8 hackathon tracks (e.g., `math`, `code_gen`, `sentiment`). 
 
-### 3. 🎯 Smart Model Tiering
+### 3. Smart Model Tiering
 TERA dynamically analyzes the injected `ALLOWED_MODELS` list at runtime and sorts them into tiers:
 - **`cheap` tier** (Smallest model) → Used for easy tasks (Sentiment, NER, Summarization)
 - **`strong` tier** (Largest model) → Used for hard tasks (Math, Logic, Factual)
@@ -40,15 +40,15 @@ TERA dynamically analyzes the injected `ALLOWED_MODELS` list at runtime and sort
 
 *Result: We use maximum intelligence only when needed, saving thousands of tokens on easier tasks.*
 
-### 4. 📝 Judge-Aligned System Prompts & Budgets
+### 4. Judge-Aligned System Prompts & Budgets
 Once classified, the task is given a highly specific system prompt designed exactly for the Hackathon LLM-Judge. 
 - *Example (Logic):* "Deduce in brief numbered steps, then 'Answer: <value>' on its own line."
 Each category also gets a strict `max_tokens` budget to prevent runaway generation.
 
-### 5. 🛡️ Fallback Safety Net
+### 5. Fallback Safety Net
 If the primary model API fails or returns a blank string, TERA automatically catches the error and retries the prompt using the `strong` model tier, ensuring an answer is always provided.
 
-## 🚀 Execution Flow
+##  Execution Flow
 
 ```text
 Input Tasks (/input/tasks.json)
@@ -77,7 +77,7 @@ Input Tasks (/input/tasks.json)
   /output/results.json
 ```
 
-## 🛠️ Build & Run
+##  Build & Run
 
 ```bash
 # Build Docker image
