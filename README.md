@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/banner.png" alt="AMD Developer Hackathon" width="80%">
+  <img src="assets/banner_new.png" alt="AMD Developer Hackathon" width="80%">
   <br><br>
   <img src="assets/tera_icon_transparent.png" alt="TERA Logo" width="180">
   <br><br>
